@@ -1,8 +1,27 @@
 <script lang="ts">
-	import type { TradeWithParticipants } from '$lib/types/database';
+	import type { Asset } from '$lib/types/database';
 
-	// TODO: Replace with real data from Supabase store
-	let trades: TradeWithParticipants[] = [];
+	interface TradeData {
+		id: string;
+		asset_id: string;
+		buyer_id: string;
+		seller_id: string;
+		price: number;
+		size: number;
+		executed_at: string;
+	}
+
+	export let trades: TradeData[] = [];
+	export let assets: Asset[] = [];
+	export let participants: Array<{ id: string; name: string }> = [];
+
+	function getAssetName(assetId: string): string {
+		return assets.find((a) => a.id === assetId)?.name ?? 'Unknown';
+	}
+
+	function getParticipantName(participantId: string): string {
+		return participants.find((p) => p.id === participantId)?.name ?? 'Unknown';
+	}
 
 	function formatTime(dateStr: string): string {
 		const date = new Date(dateStr);
@@ -15,20 +34,20 @@
 		<p class="empty">No trades yet.</p>
 	{:else}
 		<ul>
-			{#each trades as trade}
+			{#each trades as trade (trade.id)}
 				<li>
 					<div class="trade-header">
-						<span class="asset">{trade.asset.name}</span>
+						<span class="asset">{getAssetName(trade.asset_id)}</span>
 						<span class="time">{formatTime(trade.executed_at)}</span>
 					</div>
 					<div class="trade-details">
-						<span class="buyer">{trade.buyer.name}</span>
+						<span class="buyer">{getParticipantName(trade.buyer_id)}</span>
 						<span class="action">bought</span>
 						<span class="size">{trade.size}</span>
 						<span class="at">@</span>
 						<span class="price">{trade.price}</span>
 						<span class="from">from</span>
-						<span class="seller">{trade.seller.name}</span>
+						<span class="seller">{getParticipantName(trade.seller_id)}</span>
 					</div>
 				</li>
 			{/each}

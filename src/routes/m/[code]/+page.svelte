@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
+	import { browser } from '$app/environment';
+	import { supabase } from '$lib/supabase';
+	import type { RealtimeChannel } from '@supabase/supabase-js';
 	import OrderBook from '$lib/components/OrderBook.svelte';
 	import TradeBlotter from '$lib/components/TradeBlotter.svelte';
 	import PositionBlotter from '$lib/components/PositionBlotter.svelte';
@@ -8,45 +11,189 @@
 
 	export let data;
 
+	let channel: RealtimeChannel | null = null;
+
 	let showSaveLinkModal = false;
+	const SEEN_KEY = `mm_seen_${data.participant.token}`;
+
+	function setupSubscriptions() {
+		const assetIds = data.assets.map((a) => a.id);
+
+		// Build the channel with subscriptions
+		let channelBuilder = supabase
+			.channel(`market-${data.market.id}-${Date.now()}`)
+			// Always subscribe to assets (filtered by market_id)
+			.on(
+				'postgres_changes',
+				{
+					event: '*',
+					schema: 'public',
+					table: 'assets',
+					filter: `market_id=eq.${data.market.id}`
+				},
+				(payload) => {
+					if (payload.eventType === 'INSERT') {
+						if (!data.assets.find((a) => a.id === payload.new.id)) {
+							data.assets = [...data.assets, payload.new as any];
+							// Re-subscribe to include new asset's orders/trades
+							resubscribeWithNewAssets();
+						}
+					} else if (payload.eventType === 'UPDATE') {
+						data.assets = data.assets.map((a) =>
+							a.id === payload.new.id ? (payload.new as any) : a
+						);
+					}
+				}
+			)
+			// Always subscribe to participants (filtered by market_id)
+			.on(
+				'postgres_changes',
+				{
+					event: 'INSERT',
+					schema: 'public',
+					table: 'participants',
+					filter: `market_id=eq.${data.market.id}`
+				},
+				(payload) => {
+					if (!data.participants.find((p) => p.id === payload.new.id)) {
+						data.participants = [
+							...data.participants,
+							{ id: payload.new.id, name: payload.new.name }
+						];
+					}
+				}
+			);
+
+		// Only subscribe to orders/trades if there are assets
+		if (assetIds.length > 0) {
+			channelBuilder = channelBuilder
+				.on(
+					'postgres_changes',
+					{
+						event: '*',
+						schema: 'public',
+						table: 'orders',
+						filter: `asset_id=in.(${assetIds.join(',')})`
+					},
+					(payload) => {
+						if (payload.eventType === 'INSERT') {
+							if (!data.orders.find((o) => o.id === payload.new.id)) {
+								data.orders = [...data.orders, payload.new as any];
+							}
+						} else if (payload.eventType === 'UPDATE') {
+							data.orders = data.orders.map((o) =>
+								o.id === payload.new.id ? (payload.new as any) : o
+							);
+						} else if (payload.eventType === 'DELETE') {
+							data.orders = data.orders.filter((o) => o.id !== payload.old.id);
+						}
+					}
+				)
+				.on(
+					'postgres_changes',
+					{
+						event: 'INSERT',
+						schema: 'public',
+						table: 'trades',
+						filter: `asset_id=in.(${assetIds.join(',')})`
+					},
+					(payload) => {
+						if (!data.trades.find((t) => t.id === payload.new.id)) {
+							data.trades = [payload.new as any, ...data.trades];
+						}
+					}
+				);
+		}
+
+		channel = channelBuilder.subscribe();
+	}
+
+	async function resubscribeWithNewAssets() {
+		if (channel) {
+			await supabase.removeChannel(channel);
+		}
+		setupSubscriptions();
+	}
 
 	onMount(() => {
-		// Show the save link modal if this is a new join
-		const isNewJoin = $page.url.searchParams.get('new') === 'true';
-		if (isNewJoin) {
+		// Show save link modal on first visit (if not seen before)
+		if (data.isFirstVisit && !localStorage.getItem(SEEN_KEY)) {
 			showSaveLinkModal = true;
-			// Clean up the URL
-			const url = new URL(window.location.href);
-			url.searchParams.delete('new');
-			url.searchParams.delete('name');
-			url.searchParams.delete('create');
-			window.history.replaceState({}, '', url);
+		}
+
+		// Set up real-time subscriptions
+		setupSubscriptions();
+	});
+
+	onDestroy(() => {
+		if (channel) {
+			supabase.removeChannel(channel);
 		}
 	});
 
+	function handleModalClose() {
+		showSaveLinkModal = false;
+		// Remember that user has seen the modal
+		localStorage.setItem(SEEN_KEY, 'true');
+		// Clean up URL to remove first visit indicator
+		const url = new URL(window.location.href);
+		url.searchParams.set('first', 'false');
+		window.history.replaceState({}, '', url);
+	}
+
 	function getPersonalLink(): string {
-		// TODO: Generate actual personal link with participant token
+		if (!browser) return '';
 		const baseUrl = $page.url.origin;
-		return `${baseUrl}/m/${$page.params.code}?p=TOKEN_HERE`;
+		return `${baseUrl}/m/${data.market.code}?p=${data.participant.token}`;
+	}
+
+	function handleAssetCreated(event: CustomEvent) {
+		// Add the new asset to the list
+		data.assets = [...data.assets, event.detail];
+	}
+
+	function handleOrderCreated(event: CustomEvent) {
+		// Add the new order to the list
+		data.orders = [...data.orders, event.detail];
+	}
+
+	function handleOrderUpdated(event: CustomEvent) {
+		// Update the order in the list (for fills)
+		const updated = event.detail;
+		data.orders = data.orders.map((o) => (o.id === updated.id ? updated : o));
+	}
+
+	function handleTradeExecuted(event: CustomEvent) {
+		// Add the new trade to the list
+		data.trades = [event.detail, ...data.trades];
+	}
+
+	function handleAssetUpdated(event: CustomEvent) {
+		// Update the asset's last_price
+		const { id, last_price } = event.detail;
+		data.assets = data.assets.map((a) => (a.id === id ? { ...a, last_price } : a));
 	}
 </script>
 
 <svelte:head>
-	<title>Market: {$page.params.code} | MarketMaker</title>
+	<title>Market: {data.market.code} | MarketMaker</title>
 </svelte:head>
 
 {#if showSaveLinkModal}
-	<SaveLinkModal link={getPersonalLink()} on:close={() => (showSaveLinkModal = false)} />
+	<SaveLinkModal link={getPersonalLink()} on:close={handleModalClose} />
 {/if}
 
 <div class="market-page">
 	<header>
 		<div class="header-left">
 			<h1>MarketMaker</h1>
-			<span class="market-code">{$page.params.code}</span>
+			<span class="market-code">{data.market.code}</span>
 		</div>
 		<div class="header-right">
-			<span class="participant-name">TODO: Name</span>
+			<span class="participant-name">{data.participant.name}</span>
+			{#if data.participant.is_admin}
+				<span class="admin-badge">Admin</span>
+			{/if}
 			<button class="link-btn" on:click={() => (showSaveLinkModal = true)}>
 				My Link
 			</button>
@@ -56,7 +203,17 @@
 	<main>
 		<section class="orderbook-section">
 			<h2>Order Book</h2>
-			<OrderBook />
+			<OrderBook
+				assets={data.assets}
+				orders={data.orders}
+				marketId={data.market.id}
+				participantId={data.participant.id}
+				on:assetCreated={handleAssetCreated}
+				on:orderCreated={handleOrderCreated}
+				on:orderUpdated={handleOrderUpdated}
+				on:tradeExecuted={handleTradeExecuted}
+				on:assetUpdated={handleAssetUpdated}
+			/>
 		</section>
 
 		<aside class="sidebar">
@@ -67,7 +224,11 @@
 
 			<section class="trades-section">
 				<h2>Recent Trades</h2>
-				<TradeBlotter />
+				<TradeBlotter
+					trades={data.trades}
+					assets={data.assets}
+					participants={data.participants}
+				/>
 			</section>
 		</aside>
 	</main>
@@ -118,6 +279,16 @@
 	.participant-name {
 		color: #aaa;
 		font-size: 0.875rem;
+	}
+
+	.admin-badge {
+		font-size: 0.75rem;
+		color: #fbbf24;
+		background: rgba(251, 191, 36, 0.15);
+		padding: 0.25rem 0.5rem;
+		border-radius: 4px;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
 	}
 
 	.link-btn {
