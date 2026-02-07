@@ -19,6 +19,14 @@
 	let showSettleUpModal = false;
 	const SEEN_KEY = `mm_seen_${data.participant.token}`;
 
+	let orderSound: HTMLAudioElement;
+	let tradeSound: HTMLAudioElement;
+
+	function playSound(sound: HTMLAudioElement) {
+		sound.currentTime = 0;
+		sound.play().catch(() => {});
+	}
+
 	// Helper to check if an asset belongs to this market
 	function isMarketAsset(assetId: string): boolean {
 		return data.assets.some((a) => a.id === assetId);
@@ -88,6 +96,7 @@
 					if (payload.eventType === 'INSERT') {
 						if (!data.orders.find((o) => o.id === payload.new.id)) {
 							data.orders = [...data.orders, payload.new as any];
+							playSound(orderSound);
 						}
 					} else if (payload.eventType === 'UPDATE') {
 						data.orders = data.orders.map((o) =>
@@ -109,6 +118,7 @@
 
 					if (!data.trades.find((t) => t.id === payload.new.id)) {
 						data.trades = [payload.new as any, ...data.trades];
+						playSound(tradeSound);
 					}
 				}
 			)
@@ -116,6 +126,9 @@
 	}
 
 	onMount(() => {
+		orderSound = new Audio('/sounds/order.mp3');
+		tradeSound = new Audio('/sounds/trade.mp3');
+
 		// Show save link modal on first visit (if not seen before)
 		if (data.isFirstVisit && !localStorage.getItem(SEEN_KEY)) {
 			showSaveLinkModal = true;

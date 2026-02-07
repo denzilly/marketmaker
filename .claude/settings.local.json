@@ -11,7 +11,8 @@
       "Bash(ping:*)",
       "Bash(npm ls:*)",
       "Bash(node -e:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(move:*)"
     ]
   }
 }
