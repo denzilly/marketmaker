@@ -363,8 +363,8 @@
 		flex: 1;
 		display: grid;
 		grid-template-columns: 1fr 350px;
-		gap: 1rem;
-		padding: 1rem;
+		gap: 0.7rem;
+		padding: 0.7rem;
 	}
 
 	section h2 {
@@ -377,7 +377,7 @@
 
 	.orderbook-section {
 		background: #111b2e;
-		border-radius: 12px;
+		border-radius: 0px;
 		border: 1px solid #243254;
 		padding: 1rem;
 	}
@@ -385,14 +385,14 @@
 	.sidebar {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 0.7rem;
 	}
 
 	.positions-section,
 	.orders-section,
 	.trades-section {
 		background: #111b2e;
-		border-radius: 12px;
+		border-radius: 0px;
 		border: 1px solid #243254;
 		padding: 1rem;
 	}

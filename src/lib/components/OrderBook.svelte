@@ -100,6 +100,10 @@
 			settlementError = 'Settlement value must be a number';
 			return;
 		}
+		if (Math.round(value * 10) !== value * 10) {
+			settlementError = 'Max 1 decimal place';
+			return;
+		}
 
 		submittingSettlement = true;
 		settlementError = '';
@@ -219,6 +223,7 @@
 			const price = parseFloat(bidPrice);
 			const size = parseInt(bidSize, 10);
 			if (isNaN(price)) { orderError = 'Bid price must be a number'; return; }
+			if (Math.round(price * 10) !== price * 10) { orderError = 'Bid price: max 1 decimal place'; return; }
 			if (isNaN(size) || size <= 0) { orderError = 'Bid size must be a positive integer'; return; }
 		}
 
@@ -226,6 +231,7 @@
 			const price = parseFloat(offerPrice);
 			const size = parseInt(offerSize, 10);
 			if (isNaN(price)) { orderError = 'Offer price must be a number'; return; }
+			if (Math.round(price * 10) !== price * 10) { orderError = 'Offer price: max 1 decimal place'; return; }
 			if (isNaN(size) || size <= 0) { orderError = 'Offer size must be a positive integer'; return; }
 		}
 
@@ -304,7 +310,7 @@
 
 	function depthBar(size: number, maxSize: number, side: 'bid' | 'ask'): string {
 		const pct = (size / maxSize) * 100;
-		const color = side === 'bid' ? '74,222,128' : '248,113,113';
+		const color = side === 'bid' ? '248,113,113' : '74,222,128';
 		const dir = side === 'bid' ? 'to left' : 'to right';
 		return `background: linear-gradient(${dir}, rgba(${color},0.18) ${pct}%, transparent ${pct}%)`;
 	}
@@ -374,7 +380,7 @@
 				<input
 					type="text"
 					bind:value={newAssetName}
-					placeholder="e.g. Bill's Math Test Score"
+					placeholder="e.g. Fred's quiz score"
 					maxlength="50"
 					disabled={creating}
 				/>
@@ -384,7 +390,7 @@
 				<input
 					type="text"
 					bind:value={newAssetDescription}
-					placeholder="What are we trading on?"
+					placeholder="What is the payoff structure of this contract?"
 					maxlength="200"
 					disabled={creating}
 				/>
@@ -404,9 +410,6 @@
 			<button class="create-asset-btn" on:click={() => (showCreateForm = true)}>+ Create Asset</button>
 		</div>
 	{:else}
-		<div class="table-header">
-			<button class="create-asset-btn small" on:click={() => (showCreateForm = true)}>+ New Asset</button>
-		</div>
 		<table>
 			<thead>
 				<tr>
@@ -543,7 +546,7 @@
 												type="number"
 												bind:value={settlementValue}
 												placeholder="0.00"
-												step="0.01"
+												step="0.1"
 												disabled={submittingSettlement}
 											/>
 										</label>
@@ -592,7 +595,7 @@
 												type="number"
 												bind:value={bidPrice}
 												placeholder="0.00"
-												step="0.01"
+												step="0.1"
 												disabled={submittingOrder}
 												class="bid-input"
 											/>
@@ -603,7 +606,7 @@
 												type="number"
 												bind:value={offerPrice}
 												placeholder="0.00"
-												step="0.01"
+												step="0.1"
 												disabled={submittingOrder}
 												class="offer-input"
 											/>
@@ -634,6 +637,9 @@
 				{/each}
 			</tbody>
 		</table>
+		<div class="table-footer">
+			<button class="create-asset-btn small" on:click={() => (showCreateForm = true)}>+ New Asset</button>
+		</div>
 	{/if}
 </div>
 
@@ -664,14 +670,22 @@
 
 	.create-asset-btn.small {
 		margin-top: 0;
-		padding: 0.5rem 1rem;
+		padding: 0.375rem 1rem;
 		font-size: 0.75rem;
+		width: 100%;
+		background: transparent;
+		border: 1px solid #243254;
+		color: #adc5e4;
 	}
 
-	.table-header {
-		display: flex;
-		justify-content: flex-end;
-		margin-bottom: 0.75rem;
+	.create-asset-btn.small:hover {
+		border-color: #3d5078;
+		color: #8498b5;
+		background: transparent;
+	}
+
+	.table-footer {
+		margin-top: 0.5rem;
 	}
 
 	.create-form {
@@ -799,17 +813,17 @@
 
 	.bid-col,
 	.ask-col {
-		width: 120px;
+		width: 100px;
 	}
 
 	.bid-col {
 		text-align: right;
-		padding-right: 0;
+		padding-right: 4px;
 	}
 
 	.ask-col {
 		text-align: left;
-		padding-left: 0;
+		padding-left: 4px;
 	}
 
 	.size-col {
@@ -819,6 +833,8 @@
 		text-align: center;
 		padding-left: 0;
 		padding-right: 0;
+		border-left: 1px solid #243254;
+		border-right: 1px solid #243254;
 	}
 
 	.actions-col {
@@ -827,7 +843,8 @@
 	}
 
 	.price-btn {
-		padding: 0.375rem 1.25rem;
+		padding: 0.375rem 0;
+		width: 70%;
 		border: none;
 		border-radius: 4px;
 		font-weight: 500;
@@ -849,21 +866,21 @@
 	}
 
 	.price-btn.bid {
-		background: #14532d;
-		color: #4ade80;
-	}
-
-	.price-btn.bid:hover:not(:disabled) {
-		background: #166534;
-	}
-
-	.price-btn.ask {
 		background: #7f1d1d;
 		color: #f87171;
 	}
 
-	.price-btn.ask:hover:not(:disabled) {
+	.price-btn.bid:hover:not(:disabled) {
 		background: #991b1b;
+	}
+
+	.price-btn.ask {
+		background: #14532d;
+		color: #4ade80;
+	}
+
+	.price-btn.ask:hover:not(:disabled) {
+		background: #166534;
 	}
 
 	.no-price {
@@ -971,11 +988,11 @@
 	}
 
 	.depth-price.bid {
-		color: #4ade80;
+		color: #f87171;
 	}
 
 	.depth-price.ask {
-		color: #f87171;
+		color: #4ade80;
 	}
 
 	.depth-empty-msg {
@@ -1144,27 +1161,27 @@
 	}
 
 	.order-form .bid-input {
-		border-color: #14532d;
-	}
-
-	.order-form .bid-input:focus {
-		border-color: #4ade80;
-	}
-
-	.order-form .offer-input {
 		border-color: #7f1d1d;
 	}
 
-	.order-form .offer-input:focus {
+	.order-form .bid-input:focus {
 		border-color: #f87171;
 	}
 
+	.order-form .offer-input {
+		border-color: #14532d;
+	}
+
+	.order-form .offer-input:focus {
+		border-color: #4ade80;
+	}
+
 	.order-form .bid-price {
-		color: #4ade80;
+		color: #f87171;
 	}
 
 	.order-form .offer-price {
-		color: #f87171;
+		color: #4ade80;
 	}
 
 	.submit-btn {

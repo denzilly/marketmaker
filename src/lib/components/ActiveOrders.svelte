@@ -157,12 +157,12 @@
 	}
 
 	.bid {
-		color: #4ade80;
+		color: #f87171;
 		font-weight: 600;
 	}
 
 	.ask {
-		color: #f87171;
+		color: #4ade80;
 		font-weight: 600;
 	}
 
