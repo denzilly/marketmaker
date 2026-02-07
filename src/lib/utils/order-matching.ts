@@ -26,6 +26,7 @@ export async function matchOrder(
 	// Filter to opposite side orders that cross
 	const oppositeOrders = existingOrders
 		.filter((o) => {
+			if (o.asset_id !== incomingOrder.asset_id) return false;
 			if (o.status !== 'open' || o.remaining_size <= 0) return false;
 			if (o.participant_id === incomingOrder.participant_id) return false; // Can't trade with yourself
 
