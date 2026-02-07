@@ -10,6 +10,7 @@
 	import ActiveOrders from '$lib/components/ActiveOrders.svelte';
 	import SaveLinkModal from '$lib/components/SaveLinkModal.svelte';
 	import SettleUpModal from '$lib/components/SettleUpModal.svelte';
+	import AdminPanel from '$lib/components/AdminPanel.svelte';
 
 	export let data;
 
@@ -17,6 +18,7 @@
 
 	let showSaveLinkModal = false;
 	let showSettleUpModal = false;
+	let showAdminPanel = false;
 	const SEEN_KEY = `mm_seen_${data.participant.token}`;
 
 	let orderSound: HTMLAudioElement;
@@ -208,6 +210,14 @@
 	<SaveLinkModal link={getPersonalLink()} on:close={handleModalClose} />
 {/if}
 
+{#if showAdminPanel}
+	<AdminPanel
+		marketId={data.market.id}
+		marketCode={data.market.code}
+		on:close={() => (showAdminPanel = false)}
+	/>
+{/if}
+
 {#if showSettleUpModal}
 	<SettleUpModal
 		trades={data.trades}
@@ -227,6 +237,9 @@
 			<span class="participant-name">{data.participant.name}</span>
 			{#if data.participant.is_admin}
 				<span class="admin-badge">Admin</span>
+				<button class="admin-btn" on:click={() => (showAdminPanel = true)}>
+					Admin Panel
+				</button>
 			{/if}
 			<button class="settle-up-btn" on:click={() => (showSettleUpModal = true)}>
 				Settle Up
@@ -342,6 +355,20 @@
 		border-radius: 4px;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
+	}
+
+	.admin-btn {
+		background: transparent;
+		border: 1px solid #fbbf24;
+		color: #fbbf24;
+		padding: 0.5rem 1rem;
+		border-radius: 6px;
+		font-size: 0.875rem;
+		font-weight: 500;
+	}
+
+	.admin-btn:hover {
+		background: rgba(251, 191, 36, 0.15);
 	}
 
 	.link-btn {
