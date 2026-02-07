@@ -212,4 +212,11 @@
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
+
+	@media (max-width: 600px) {
+		th, td {
+			padding: 0.25rem 0.375rem;
+			font-size: 0.75rem;
+		}
+	}
 </style>

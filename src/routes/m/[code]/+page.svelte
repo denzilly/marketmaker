@@ -493,4 +493,33 @@
 			flex: 1;
 		}
 	}
+
+	@media (max-width: 600px) {
+		header {
+			flex-direction: column;
+			gap: 0.75rem;
+			padding: 0.75rem 1rem;
+		}
+
+		.header-right {
+			flex-wrap: wrap;
+			justify-content: center;
+			gap: 0.5rem;
+		}
+
+		main {
+			grid-template-columns: 1fr;
+			gap: 0.5rem;
+			padding: 0.5rem;
+		}
+
+		.sidebar {
+			flex-direction: column;
+		}
+
+		.trades-section {
+			max-height: 300px;
+			overflow: hidden;
+		}
+	}
 </style>

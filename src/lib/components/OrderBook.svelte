@@ -337,11 +337,21 @@
 			.filter((o) => o.side === 'sell')
 			.sort((a, b) => a.price - b.price);
 
-		const depthBids = aggregateLevels(bids.slice(1));
-		const depthAsks = aggregateLevels(asks.slice(1));
+		const bestBidPrice = bids[0]?.price ?? null;
+		const bestAskPrice = asks[0]?.price ?? null;
+
+		const topBidSize = bestBidPrice !== null
+			? bids.filter((o) => o.price === bestBidPrice).reduce((s, o) => s + o.remaining_size, 0)
+			: 0;
+		const topAskSize = bestAskPrice !== null
+			? asks.filter((o) => o.price === bestAskPrice).reduce((s, o) => s + o.remaining_size, 0)
+			: 0;
+
+		const depthBids = aggregateLevels(bids.filter((o) => o.price !== bestBidPrice));
+		const depthAsks = aggregateLevels(asks.filter((o) => o.price !== bestAskPrice));
 		const maxSize = Math.max(
-			bids[0]?.remaining_size ?? 0,
-			asks[0]?.remaining_size ?? 0,
+			topBidSize,
+			topAskSize,
 			...depthBids.map((d) => d.size),
 			...depthAsks.map((d) => d.size),
 			1
@@ -350,7 +360,9 @@
 		return {
 			asset,
 			topBid: bids[0] ?? null,
+			topBidSize,
 			topAsk: asks[0] ?? null,
+			topAskSize,
 			bids,
 			asks,
 			depthBids,
@@ -422,7 +434,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each ordersByAsset as { asset, topBid, topAsk, depthBids, depthAsks, maxSize }}
+				{#each ordersByAsset as { asset, topBid, topBidSize, topAsk, topAskSize, depthBids, depthAsks, maxSize }}
 					<tr
 						class:has-sub-row={orderEntryAssetId === asset.id || depthAssetId === asset.id || settlingAssetId === asset.id}
 						class:settled={asset.status === 'settled'}
@@ -440,7 +452,7 @@
 							</td>
 							<td class="actions-col"></td>
 						{:else}
-							<td class="size-col">{topBid?.remaining_size ?? '-'}</td>
+							<td class="size-col">{topBidSize || '-'}</td>
 							<td class="bid-col">
 								{#if topBid}
 									{@const ownBid = topBid.participant_id === participantId}
@@ -473,7 +485,7 @@
 									<span class="no-price">-</span>
 								{/if}
 							</td>
-							<td class="size-col">{topAsk?.remaining_size ?? '-'}</td>
+							<td class="size-col">{topAskSize || '-'}</td>
 							<td class="actions-col">
 								{#if isAdmin}
 									<button
@@ -647,6 +659,7 @@
 <style>
 	.orderbook {
 		width: 100%;
+		overflow-x: auto;
 	}
 
 	.empty {
@@ -1203,5 +1216,78 @@
 	.submit-btn:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	@media (max-width: 600px) {
+		table {
+			font-size: 0.75rem;
+		}
+
+		td {
+			padding: 0.5rem 0.25rem;
+		}
+
+		th {
+			padding: 0.375rem 0.25rem;
+		}
+
+		.asset-col {
+			min-width: 80px;
+		}
+
+		.bid-col,
+		.ask-col {
+			width: 70px;
+		}
+
+		.size-col {
+			width: 30px;
+			font-size: 0.75rem;
+		}
+
+		.actions-col {
+			width: 60px;
+		}
+
+		.price-btn {
+			width: 90%;
+			font-size: 0.75rem;
+			padding: 0.25rem 0;
+		}
+
+		.add-order-btn,
+		.depth-btn,
+		.settle-btn {
+			padding: 0.2rem 0.375rem;
+			font-size: 0.6875rem;
+		}
+
+		.order-form {
+			gap: 0.5rem;
+		}
+
+		.order-form input {
+			width: 60px;
+			padding: 0.375rem;
+			font-size: 0.75rem;
+		}
+
+		.order-form label {
+			font-size: 0.625rem;
+		}
+
+		.submit-btn {
+			padding: 0.375rem 0.75rem;
+			font-size: 0.75rem;
+		}
+
+		.settlement-inputs {
+			flex-direction: column;
+			align-items: stretch;
+		}
+
+		.settlement-inputs input {
+			width: 100%;
+		}
 	}
 </style>
