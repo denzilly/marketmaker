@@ -545,7 +545,7 @@
 											<input
 												type="number"
 												bind:value={settlementValue}
-												placeholder="0.00"
+												placeholder="0.0"
 												step="0.1"
 												disabled={submittingSettlement}
 											/>
@@ -577,7 +577,8 @@
 									{#if orderError}
 										<div class="error">{orderError}</div>
 									{/if}
-									<div class="order-form two-way">
+									<!-- svelte-ignore a11y-no-static-element-interactions -->
+								<div class="order-form two-way" on:keydown={(e) => { if (e.key === 'Enter' && canSubmit && !submittingOrder) submitOrders(); }}>
 										<label class="bid-size">
 											Size
 											<input
@@ -594,7 +595,7 @@
 											<input
 												type="number"
 												bind:value={bidPrice}
-												placeholder="0.00"
+												placeholder="0.0"
 												step="0.1"
 												disabled={submittingOrder}
 												class="bid-input"
@@ -605,7 +606,7 @@
 											<input
 												type="number"
 												bind:value={offerPrice}
-												placeholder="0.00"
+												placeholder="0.0"
 												step="0.1"
 												disabled={submittingOrder}
 												class="offer-input"
