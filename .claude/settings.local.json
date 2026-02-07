@@ -7,7 +7,11 @@
       "Bash(npm run check:*)",
       "Bash(ls:*)",
       "Bash(test:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(ping:*)",
+      "Bash(npm ls:*)",
+      "Bash(node -e:*)",
+      "Bash(python:*)"
     ]
   }
 }

@@ -48,8 +48,9 @@
 
 			// Navigate to market with participant token
 			goto(`/m/${code}?p=${participant.token}`);
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to create market';
+		} catch (e: any) {
+			console.error('Create market error:', e);
+			error = e?.message || e?.error_description || JSON.stringify(e);
 		} finally {
 			loading = false;
 		}

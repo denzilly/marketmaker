@@ -7,22 +7,27 @@
 	import OrderBook from '$lib/components/OrderBook.svelte';
 	import TradeBlotter from '$lib/components/TradeBlotter.svelte';
 	import PositionBlotter from '$lib/components/PositionBlotter.svelte';
+	import ActiveOrders from '$lib/components/ActiveOrders.svelte';
 	import SaveLinkModal from '$lib/components/SaveLinkModal.svelte';
+	import SettleUpModal from '$lib/components/SettleUpModal.svelte';
 
 	export let data;
 
 	let channel: RealtimeChannel | null = null;
 
 	let showSaveLinkModal = false;
+	let showSettleUpModal = false;
 	const SEEN_KEY = `mm_seen_${data.participant.token}`;
 
-	function setupSubscriptions() {
-		const assetIds = data.assets.map((a) => a.id);
+	// Helper to check if an asset belongs to this market
+	function isMarketAsset(assetId: string): boolean {
+		return data.assets.some((a) => a.id === assetId);
+	}
 
-		// Build the channel with subscriptions
-		let channelBuilder = supabase
-			.channel(`market-${data.market.id}-${Date.now()}`)
-			// Always subscribe to assets (filtered by market_id)
+	function setupSubscriptions() {
+		channel = supabase
+			.channel(`market-${data.market.id}`)
+			// Subscribe to assets (filtered by market_id)
 			.on(
 				'postgres_changes',
 				{
@@ -35,8 +40,6 @@
 					if (payload.eventType === 'INSERT') {
 						if (!data.assets.find((a) => a.id === payload.new.id)) {
 							data.assets = [...data.assets, payload.new as any];
-							// Re-subscribe to include new asset's orders/trades
-							resubscribeWithNewAssets();
 						}
 					} else if (payload.eventType === 'UPDATE') {
 						data.assets = data.assets.map((a) =>
@@ -45,7 +48,7 @@
 					}
 				}
 			)
-			// Always subscribe to participants (filtered by market_id)
+			// Subscribe to participants (filtered by market_id)
 			.on(
 				'postgres_changes',
 				{
@@ -62,57 +65,54 @@
 						];
 					}
 				}
-			);
-
-		// Only subscribe to orders/trades if there are assets
-		if (assetIds.length > 0) {
-			channelBuilder = channelBuilder
-				.on(
-					'postgres_changes',
-					{
-						event: '*',
-						schema: 'public',
-						table: 'orders',
-						filter: `asset_id=in.(${assetIds.join(',')})`
-					},
-					(payload) => {
-						if (payload.eventType === 'INSERT') {
-							if (!data.orders.find((o) => o.id === payload.new.id)) {
-								data.orders = [...data.orders, payload.new as any];
-							}
-						} else if (payload.eventType === 'UPDATE') {
-							data.orders = data.orders.map((o) =>
-								o.id === payload.new.id ? (payload.new as any) : o
-							);
-						} else if (payload.eventType === 'DELETE') {
-							data.orders = data.orders.filter((o) => o.id !== payload.old.id);
-						}
+			)
+			// Subscribe to all orders - filter client-side by checking if asset belongs to market
+			.on(
+				'postgres_changes',
+				{
+					event: '*',
+					schema: 'public',
+					table: 'orders'
+				},
+				(payload) => {
+					if (payload.eventType === 'DELETE') {
+						// DELETE events only have the id in payload.old, so check if
+						// we're tracking this order locally instead of checking asset
+						data.orders = data.orders.filter((o) => o.id !== payload.old.id);
+						return;
 					}
-				)
-				.on(
-					'postgres_changes',
-					{
-						event: 'INSERT',
-						schema: 'public',
-						table: 'trades',
-						filter: `asset_id=in.(${assetIds.join(',')})`
-					},
-					(payload) => {
-						if (!data.trades.find((t) => t.id === payload.new.id)) {
-							data.trades = [payload.new as any, ...data.trades];
+
+					const assetId = payload.new?.asset_id;
+					if (!isMarketAsset(assetId)) return;
+
+					if (payload.eventType === 'INSERT') {
+						if (!data.orders.find((o) => o.id === payload.new.id)) {
+							data.orders = [...data.orders, payload.new as any];
 						}
+					} else if (payload.eventType === 'UPDATE') {
+						data.orders = data.orders.map((o) =>
+							o.id === payload.new.id ? (payload.new as any) : o
+						);
 					}
-				);
-		}
+				}
+			)
+			// Subscribe to all trades - filter client-side
+			.on(
+				'postgres_changes',
+				{
+					event: 'INSERT',
+					schema: 'public',
+					table: 'trades'
+				},
+				(payload) => {
+					if (!isMarketAsset(payload.new.asset_id)) return;
 
-		channel = channelBuilder.subscribe();
-	}
-
-	async function resubscribeWithNewAssets() {
-		if (channel) {
-			await supabase.removeChannel(channel);
-		}
-		setupSubscriptions();
+					if (!data.trades.find((t) => t.id === payload.new.id)) {
+						data.trades = [payload.new as any, ...data.trades];
+					}
+				}
+			)
+			.subscribe();
 	}
 
 	onMount(() => {
@@ -148,12 +148,12 @@
 	}
 
 	function handleAssetCreated(event: CustomEvent) {
-		// Add the new asset to the list
+		if (data.assets.find((a) => a.id === event.detail.id)) return;
 		data.assets = [...data.assets, event.detail];
 	}
 
 	function handleOrderCreated(event: CustomEvent) {
-		// Add the new order to the list
+		if (data.orders.find((o) => o.id === event.detail.id)) return;
 		data.orders = [...data.orders, event.detail];
 	}
 
@@ -164,7 +164,7 @@
 	}
 
 	function handleTradeExecuted(event: CustomEvent) {
-		// Add the new trade to the list
+		if (data.trades.find((t) => t.id === event.detail.id)) return;
 		data.trades = [event.detail, ...data.trades];
 	}
 
@@ -172,6 +172,18 @@
 		// Update the asset's last_price
 		const { id, last_price } = event.detail;
 		data.assets = data.assets.map((a) => (a.id === id ? { ...a, last_price } : a));
+	}
+
+	function handleOrderCancelled(event: CustomEvent) {
+		data.orders = data.orders.filter((o) => o.id !== event.detail.id);
+	}
+
+	function handleAssetSettled(event: CustomEvent) {
+		const settledAsset = event.detail;
+		data.assets = data.assets.map((a) =>
+			a.id === settledAsset.id ? settledAsset : a
+		);
+		data.orders = data.orders.filter((o) => o.asset_id !== settledAsset.id);
 	}
 </script>
 
@@ -181,6 +193,15 @@
 
 {#if showSaveLinkModal}
 	<SaveLinkModal link={getPersonalLink()} on:close={handleModalClose} />
+{/if}
+
+{#if showSettleUpModal}
+	<SettleUpModal
+		trades={data.trades}
+		assets={data.assets}
+		participants={data.participants}
+		on:close={() => (showSettleUpModal = false)}
+	/>
 {/if}
 
 <div class="market-page">
@@ -194,6 +215,9 @@
 			{#if data.participant.is_admin}
 				<span class="admin-badge">Admin</span>
 			{/if}
+			<button class="settle-up-btn" on:click={() => (showSettleUpModal = true)}>
+				Settle Up
+			</button>
 			<button class="link-btn" on:click={() => (showSaveLinkModal = true)}>
 				My Link
 			</button>
@@ -208,18 +232,34 @@
 				orders={data.orders}
 				marketId={data.market.id}
 				participantId={data.participant.id}
+				isAdmin={data.participant.is_admin}
 				on:assetCreated={handleAssetCreated}
 				on:orderCreated={handleOrderCreated}
 				on:orderUpdated={handleOrderUpdated}
 				on:tradeExecuted={handleTradeExecuted}
 				on:assetUpdated={handleAssetUpdated}
+				on:assetSettled={handleAssetSettled}
 			/>
 		</section>
 
 		<aside class="sidebar">
 			<section class="positions-section">
 				<h2>My Positions</h2>
-				<PositionBlotter />
+				<PositionBlotter
+					trades={data.trades}
+					assets={data.assets}
+					participantId={data.participant.id}
+				/>
+			</section>
+
+			<section class="orders-section">
+				<h2>My Orders</h2>
+				<ActiveOrders
+					orders={data.orders}
+					assets={data.assets}
+					participantId={data.participant.id}
+					on:orderCancelled={handleOrderCancelled}
+				/>
 			</section>
 
 			<section class="trades-section">
@@ -305,6 +345,20 @@
 		color: #aaa;
 	}
 
+	.settle-up-btn {
+		background: transparent;
+		border: 1px solid #fbbf24;
+		color: #fbbf24;
+		padding: 0.5rem 1rem;
+		border-radius: 6px;
+		font-size: 0.875rem;
+		font-weight: 500;
+	}
+
+	.settle-up-btn:hover {
+		background: rgba(251, 191, 36, 0.15);
+	}
+
 	main {
 		flex: 1;
 		display: grid;
@@ -335,6 +389,7 @@
 	}
 
 	.positions-section,
+	.orders-section,
 	.trades-section {
 		background: #1a1a1a;
 		border-radius: 12px;
@@ -342,7 +397,8 @@
 		padding: 1rem;
 	}
 
-	.positions-section {
+	.positions-section,
+	.orders-section {
 		flex-shrink: 0;
 	}
 

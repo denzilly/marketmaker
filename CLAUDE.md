@@ -113,9 +113,3 @@ PUBLIC_SUPABASE_ANON_KEY=<configured>
 - All database types are defined in `database.ts`
 - Use `$lib/` alias for imports from lib folder
 - Styling is plain CSS, easy to swap for Tailwind later if desired
-
-
-
-we left off here I need to refactor the subscription logic to handle the case where there are initially no assets. Let me rewrite the onMount to use a cleaner subscription helper.
-
-you were working on +page.svelte

@@ -8,6 +8,7 @@
 	export let orders: Order[] = [];
 	export let marketId: string;
 	export let participantId: string;
+	export let isAdmin: boolean = false;
 
 	const dispatch = createEventDispatcher();
 
@@ -18,14 +19,26 @@
 	let creating = false;
 	let createError = '';
 
+	// Settlement state
+	let settlingAssetId: string | null = null;
+	let settlementValue = '';
+	let submittingSettlement = false;
+	let settlementError = '';
+
 	// Order entry state (two-way pricing)
-	let expandedAssetId: string | null = null;
+	let orderEntryAssetId: string | null = null;
 	let bidSize = '';
 	let bidPrice = '';
 	let offerPrice = '';
 	let offerSize = '';
 	let submittingOrder = false;
 	let orderError = '';
+
+	// Depth view state
+	let depthAssetId: string | null = null;
+
+	// Instant trade state
+	let tradingAssetId: string | null = null;
 
 	async function createAsset() {
 		if (!newAssetName.trim()) return;
@@ -47,10 +60,8 @@
 
 			if (error) throw error;
 
-			// Dispatch event to parent
 			dispatch('assetCreated', asset);
 
-			// Reset form
 			newAssetName = '';
 			newAssetDescription = '';
 			showCreateForm = false;
@@ -68,12 +79,74 @@
 		createError = '';
 	}
 
-	function toggleExpand(assetId: string) {
-		if (expandedAssetId === assetId) {
-			expandedAssetId = null;
+	function openSettlement(assetId: string) {
+		orderEntryAssetId = null;
+		settlingAssetId = assetId;
+		settlementValue = '';
+		settlementError = '';
+	}
+
+	function cancelSettlement() {
+		settlingAssetId = null;
+		settlementValue = '';
+		settlementError = '';
+	}
+
+	async function submitSettlement() {
+		if (settlingAssetId === null) return;
+
+		const value = parseFloat(settlementValue);
+		if (isNaN(value)) {
+			settlementError = 'Settlement value must be a number';
+			return;
+		}
+
+		submittingSettlement = true;
+		settlementError = '';
+
+		try {
+			const { data: updatedAsset, error: assetError } = await supabase
+				.from('assets')
+				.update({
+					status: 'settled',
+					settlement_value: value,
+					settled_at: new Date().toISOString()
+				})
+				.eq('id', settlingAssetId)
+				.select()
+				.single();
+
+			if (assetError) throw assetError;
+
+			const { error: deleteError } = await supabase
+				.from('orders')
+				.delete()
+				.eq('asset_id', settlingAssetId)
+				.eq('status', 'open');
+
+			if (deleteError) {
+				console.error('Failed to delete orders after settlement:', deleteError);
+			}
+
+			dispatch('assetSettled', updatedAsset);
+
+			settlingAssetId = null;
+			settlementValue = '';
+		} catch (e) {
+			settlementError = e instanceof Error ? e.message : 'Failed to settle asset';
+		} finally {
+			submittingSettlement = false;
+		}
+	}
+
+	function toggleOrderEntry(assetId: string) {
+		const asset = assets.find((a) => a.id === assetId);
+		if (asset?.status === 'settled') return;
+
+		if (orderEntryAssetId === assetId) {
+			orderEntryAssetId = null;
 		} else {
-			expandedAssetId = assetId;
-			// Reset order form
+			orderEntryAssetId = assetId;
 			bidSize = '';
 			bidPrice = '';
 			offerPrice = '';
@@ -82,20 +155,57 @@
 		}
 	}
 
-	function prefillOrder(side: OrderSide, price: number, assetId: string) {
-		expandedAssetId = assetId;
-		if (side === 'buy') {
-			offerPrice = price.toString();
-			offerSize = '';
-		} else {
-			bidPrice = price.toString();
-			bidSize = '';
+	function toggleDepth(assetId: string) {
+		const asset = assets.find((a) => a.id === assetId);
+		if (asset?.status === 'settled') return;
+
+		depthAssetId = depthAssetId === assetId ? null : assetId;
+	}
+
+	// Instant trade: hit the bid (sell 1) or lift the offer (buy 1)
+	async function instantTrade(assetId: string, side: OrderSide, price: number) {
+		if (tradingAssetId) return;
+		tradingAssetId = assetId;
+
+		try {
+			const { data: newOrder, error } = await supabase
+				.from('orders')
+				.insert({
+					asset_id: assetId,
+					participant_id: participantId,
+					side,
+					price,
+					size: 1,
+					remaining_size: 1
+				})
+				.select()
+				.single();
+
+			if (error) throw error;
+
+			dispatch('orderCreated', newOrder);
+
+			const result = await matchOrder(newOrder as Order, orders);
+
+			for (const trade of result.trades) {
+				dispatch('tradeExecuted', trade);
+			}
+			for (const updatedOrder of result.updatedOrders) {
+				dispatch('orderUpdated', updatedOrder);
+			}
+			if (result.trades.length > 0) {
+				const lastPrice = result.trades[result.trades.length - 1].price;
+				dispatch('assetUpdated', { id: assetId, last_price: lastPrice });
+			}
+		} catch (e) {
+			console.error('Instant trade failed:', e);
+		} finally {
+			tradingAssetId = null;
 		}
-		orderError = '';
 	}
 
 	async function submitOrders() {
-		if (!expandedAssetId) return;
+		if (!orderEntryAssetId) return;
 
 		const hasBid = bidPrice && bidSize;
 		const hasOffer = offerPrice && offerSize;
@@ -105,35 +215,20 @@
 			return;
 		}
 
-		// Validate bid
 		if (hasBid) {
 			const price = parseFloat(bidPrice);
 			const size = parseInt(bidSize, 10);
-			if (isNaN(price) || price <= 0) {
-				orderError = 'Bid price must be a positive number';
-				return;
-			}
-			if (isNaN(size) || size <= 0) {
-				orderError = 'Bid size must be a positive integer';
-				return;
-			}
+			if (isNaN(price)) { orderError = 'Bid price must be a number'; return; }
+			if (isNaN(size) || size <= 0) { orderError = 'Bid size must be a positive integer'; return; }
 		}
 
-		// Validate offer
 		if (hasOffer) {
 			const price = parseFloat(offerPrice);
 			const size = parseInt(offerSize, 10);
-			if (isNaN(price) || price <= 0) {
-				orderError = 'Offer price must be a positive number';
-				return;
-			}
-			if (isNaN(size) || size <= 0) {
-				orderError = 'Offer size must be a positive integer';
-				return;
-			}
+			if (isNaN(price)) { orderError = 'Offer price must be a number'; return; }
+			if (isNaN(size) || size <= 0) { orderError = 'Offer size must be a positive integer'; return; }
 		}
 
-		// Check bid < offer if both sides present
 		if (hasBid && hasOffer) {
 			if (parseFloat(bidPrice) >= parseFloat(offerPrice)) {
 				orderError = 'Bid must be less than offer';
@@ -149,7 +244,7 @@
 
 			if (hasBid) {
 				ordersToInsert.push({
-					asset_id: expandedAssetId,
+					asset_id: orderEntryAssetId,
 					participant_id: participantId,
 					side: 'buy' as OrderSide,
 					price: parseFloat(bidPrice),
@@ -160,7 +255,7 @@
 
 			if (hasOffer) {
 				ordersToInsert.push({
-					asset_id: expandedAssetId,
+					asset_id: orderEntryAssetId,
 					participant_id: participantId,
 					side: 'sell' as OrderSide,
 					price: parseFloat(offerPrice),
@@ -176,36 +271,28 @@
 
 			if (error) throw error;
 
-			// Process each new order: dispatch event and try to match
 			for (const order of newOrders ?? []) {
 				dispatch('orderCreated', order);
 
-				// Try to match the order against existing orders
 				const result = await matchOrder(order as Order, orders);
 
-				// Dispatch trade events
 				for (const trade of result.trades) {
 					dispatch('tradeExecuted', trade);
 				}
-
-				// Dispatch order update events (for filled/partially filled orders)
 				for (const updatedOrder of result.updatedOrders) {
 					dispatch('orderUpdated', updatedOrder);
 				}
-
-				// If trades occurred, update the asset's last price in local state
 				if (result.trades.length > 0) {
 					const lastPrice = result.trades[result.trades.length - 1].price;
-					dispatch('assetUpdated', { id: expandedAssetId, last_price: lastPrice });
+					dispatch('assetUpdated', { id: orderEntryAssetId, last_price: lastPrice });
 				}
 			}
 
-			// Reset form and collapse
 			bidSize = '';
 			bidPrice = '';
 			offerPrice = '';
 			offerSize = '';
-			expandedAssetId = null;
+			orderEntryAssetId = null;
 		} catch (e) {
 			orderError = e instanceof Error ? e.message : 'Failed to submit order';
 		} finally {
@@ -230,9 +317,19 @@
 			topBid: bids[0] ?? null,
 			topAsk: asks[0] ?? null,
 			bids,
-			asks
+			asks,
+			depthBids: bids.slice(1),
+			depthAsks: asks.slice(1)
 		};
 	});
+
+	function getTooltip(asset: Asset): string {
+		const parts = [];
+		if (asset.description) parts.push(asset.description);
+		if (asset.last_price !== null) parts.push(`Last: ${asset.last_price}`);
+		if (asset.status === 'settled') parts.push(`Settled @ ${asset.settlement_value}`);
+		return parts.join(' | ') || asset.name;
+	}
 </script>
 
 <div class="orderbook">
@@ -284,51 +381,168 @@
 			<thead>
 				<tr>
 					<th class="asset-col">Asset</th>
-					<th class="bid-col">Bid</th>
 					<th class="size-col">Size</th>
+					<th class="bid-col">Bid</th>
 					<th class="ask-col">Ask</th>
 					<th class="size-col">Size</th>
 					<th class="actions-col"></th>
 				</tr>
 			</thead>
 			<tbody>
-				{#each ordersByAsset as { asset, topBid, topAsk }}
-					<tr class:expanded={expandedAssetId === asset.id}>
+				{#each ordersByAsset as { asset, topBid, topAsk, depthBids, depthAsks }}
+					<tr
+						class:has-sub-row={orderEntryAssetId === asset.id || depthAssetId === asset.id || settlingAssetId === asset.id}
+						class:settled={asset.status === 'settled'}
+					>
 						<td class="asset-col">
-							<span class="asset-name">{asset.name}</span>
-							{#if asset.description}
-								<span class="asset-desc">{asset.description}</span>
-							{:else if asset.last_price !== null}
-								<span class="last-price">Last: {asset.last_price}</span>
+							<span class="asset-name" title={getTooltip(asset)}>{asset.name}</span>
+							{#if asset.status === 'settled'}
+								<span class="settled-label">SETTLED @ {asset.settlement_value}</span>
 							{/if}
 						</td>
-						<td class="bid-col">
-							{#if topBid}
-								<button class="price-btn bid" on:click={() => prefillOrder('sell', topBid.price, asset.id)}>
-									{topBid.price}
-								</button>
-							{:else}
-								<span class="no-price">-</span>
-							{/if}
-						</td>
-						<td class="size-col">{topBid?.remaining_size ?? '-'}</td>
-						<td class="ask-col">
-							{#if topAsk}
-								<button class="price-btn ask" on:click={() => prefillOrder('buy', topAsk.price, asset.id)}>
-									{topAsk.price}
-								</button>
-							{:else}
-								<span class="no-price">-</span>
-							{/if}
-						</td>
-						<td class="size-col">{topAsk?.remaining_size ?? '-'}</td>
-						<td class="actions-col">
-							<button class="expand-btn" class:active={expandedAssetId === asset.id} on:click={() => toggleExpand(asset.id)}>
-								{expandedAssetId === asset.id ? '▲' : '▼'}
-							</button>
-						</td>
+
+						{#if asset.status === 'settled'}
+							<td colspan="4" class="settled-info">
+								<span class="settled-value">{asset.settlement_value}</span>
+							</td>
+							<td class="actions-col"></td>
+						{:else}
+							<td class="size-col">{topBid?.remaining_size ?? '-'}</td>
+							<td class="bid-col">
+								{#if topBid}
+									{@const ownBid = topBid.participant_id === participantId}
+									<button
+										class="price-btn bid"
+										class:own={ownBid}
+										on:click={() => instantTrade(asset.id, 'sell', topBid.price)}
+										disabled={tradingAssetId === asset.id || ownBid}
+										title={ownBid ? 'Your bid' : `Sell 1 @ ${topBid.price}`}
+									>
+										{topBid.price}
+									</button>
+								{:else}
+									<span class="no-price">-</span>
+								{/if}
+							</td>
+							<td class="ask-col">
+								{#if topAsk}
+									{@const ownAsk = topAsk.participant_id === participantId}
+									<button
+										class="price-btn ask"
+										class:own={ownAsk}
+										on:click={() => instantTrade(asset.id, 'buy', topAsk.price)}
+										disabled={tradingAssetId === asset.id || ownAsk}
+										title={ownAsk ? 'Your offer' : `Buy 1 @ ${topAsk.price}`}
+									>
+										{topAsk.price}
+									</button>
+								{:else}
+									<span class="no-price">-</span>
+								{/if}
+							</td>
+							<td class="size-col">{topAsk?.remaining_size ?? '-'}</td>
+							<td class="actions-col">
+								{#if isAdmin}
+									<button
+										class="settle-btn"
+										on:click={() => openSettlement(asset.id)}
+										title="Settle this asset"
+									>S</button>
+								{/if}
+								<button
+									class="add-order-btn"
+									on:click={() => toggleOrderEntry(asset.id)}
+									class:active={orderEntryAssetId === asset.id}
+									title="Add order"
+								>+</button>
+								{#if depthBids.length > 0 || depthAsks.length > 0}
+									<button
+										class="depth-btn"
+										on:click={() => toggleDepth(asset.id)}
+										class:active={depthAssetId === asset.id}
+										title="Show order book depth"
+									>{depthAssetId === asset.id ? '▲' : '▼'}</button>
+								{/if}
+							</td>
+						{/if}
 					</tr>
-					{#if expandedAssetId === asset.id}
+
+					{#if depthAssetId === asset.id && asset.status !== 'settled'}
+						<tr class="depth-row">
+							<td colspan="6">
+								<div class="depth-panel">
+									<div class="depth-side bids-side">
+										<div class="depth-title">Bids</div>
+										{#if depthBids.length === 0}
+											<div class="depth-empty">No more bids</div>
+										{:else}
+											{#each depthBids as bid}
+												<div class="depth-level">
+													<span class="depth-size">{bid.remaining_size}</span>
+													<span class="depth-price bid">{bid.price}</span>
+												</div>
+											{/each}
+										{/if}
+									</div>
+									<div class="depth-side asks-side">
+										<div class="depth-title">Asks</div>
+										{#if depthAsks.length === 0}
+											<div class="depth-empty">No more asks</div>
+										{:else}
+											{#each depthAsks as ask}
+												<div class="depth-level">
+													<span class="depth-price ask">{ask.price}</span>
+													<span class="depth-size">{ask.remaining_size}</span>
+												</div>
+											{/each}
+										{/if}
+									</div>
+								</div>
+							</td>
+						</tr>
+					{/if}
+
+					{#if settlingAssetId === asset.id}
+						<tr class="settlement-row">
+							<td colspan="6">
+								<div class="settlement-form">
+									<h4>Settle "{asset.name}"</h4>
+									<p class="settlement-hint">Enter the final outcome value. All open orders will be cancelled.</p>
+									{#if settlementError}
+										<div class="error">{settlementError}</div>
+									{/if}
+									<div class="settlement-inputs">
+										<label>
+											Settlement Value
+											<input
+												type="number"
+												bind:value={settlementValue}
+												placeholder="0.00"
+												step="0.01"
+												disabled={submittingSettlement}
+											/>
+										</label>
+										<button
+											class="primary"
+											on:click={submitSettlement}
+											disabled={!settlementValue || submittingSettlement}
+										>
+											{submittingSettlement ? 'Settling...' : 'Confirm Settlement'}
+										</button>
+										<button
+											class="secondary"
+											on:click={cancelSettlement}
+											disabled={submittingSettlement}
+										>
+											Cancel
+										</button>
+									</div>
+								</div>
+							</td>
+						</tr>
+					{/if}
+
+					{#if orderEntryAssetId === asset.id}
 						<tr class="order-entry-row">
 							<td colspan="6">
 								<div class="order-entry">
@@ -354,7 +568,6 @@
 												bind:value={bidPrice}
 												placeholder="0.00"
 												step="0.01"
-												min="0"
 												disabled={submittingOrder}
 												class="bid-input"
 											/>
@@ -366,7 +579,6 @@
 												bind:value={offerPrice}
 												placeholder="0.00"
 												step="0.01"
-												min="0"
 												disabled={submittingOrder}
 												class="offer-input"
 											/>
@@ -529,16 +741,6 @@
 		font-size: 0.8125rem;
 	}
 
-	.asset-desc {
-		display: block;
-		font-size: 0.75rem;
-		color: #666;
-		max-width: 200px;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
 	table {
 		width: 100%;
 		border-collapse: collapse;
@@ -560,18 +762,14 @@
 	}
 
 	.asset-col {
-		min-width: 150px;
+		min-width: 120px;
 	}
 
 	.asset-name {
 		display: block;
 		font-weight: 500;
 		color: #fff;
-	}
-
-	.last-price {
-		font-size: 0.75rem;
-		color: #666;
+		cursor: default;
 	}
 
 	.bid-col,
@@ -580,13 +778,15 @@
 	}
 
 	.size-col {
-		width: 60px;
+		width: 50px;
 		color: #888;
 		font-size: 0.875rem;
+		text-align: center;
 	}
 
 	.actions-col {
-		width: 40px;
+		width: 80px;
+		white-space: nowrap;
 	}
 
 	.price-btn {
@@ -595,6 +795,20 @@
 		border-radius: 4px;
 		font-weight: 500;
 		font-size: 0.875rem;
+		cursor: pointer;
+	}
+
+	.price-btn:disabled {
+		opacity: 0.5;
+		cursor: wait;
+	}
+
+	.price-btn.own {
+		opacity: 1;
+		cursor: default;
+		outline: 1.5px solid currentColor;
+		outline-offset: -1.5px;
+		background: transparent;
 	}
 
 	.price-btn.bid {
@@ -602,7 +816,7 @@
 		color: #4ade80;
 	}
 
-	.price-btn.bid:hover {
+	.price-btn.bid:hover:not(:disabled) {
 		background: #166534;
 	}
 
@@ -611,7 +825,7 @@
 		color: #f87171;
 	}
 
-	.price-btn.ask:hover {
+	.price-btn.ask:hover:not(:disabled) {
 		background: #991b1b;
 	}
 
@@ -619,30 +833,230 @@
 		color: #444;
 	}
 
-	.expand-btn {
+	/* Action buttons */
+	.add-order-btn,
+	.depth-btn {
 		padding: 0.25rem 0.5rem;
 		background: transparent;
 		border: 1px solid #333;
 		border-radius: 4px;
 		color: #666;
 		font-size: 0.75rem;
+		margin-left: 0.125rem;
 	}
 
-	.expand-btn:hover {
+	.add-order-btn:hover,
+	.depth-btn:hover {
 		border-color: #555;
 		color: #888;
 	}
 
-	.expand-btn.active {
+	.add-order-btn.active {
+		background: #2563eb;
+		border-color: #2563eb;
+		color: #fff;
+	}
+
+	.depth-btn.active {
 		background: #333;
 		border-color: #555;
 		color: #aaa;
 	}
 
-	tr.expanded td {
+	tr.has-sub-row td {
 		border-bottom-color: transparent;
 	}
 
+	/* Settled */
+	tr.settled td {
+		opacity: 0.7;
+	}
+
+	.settled-label {
+		display: block;
+		font-size: 0.75rem;
+		color: #fbbf24;
+		font-weight: 500;
+	}
+
+	.settled-info {
+		text-align: center;
+		color: #fbbf24;
+		font-size: 0.875rem;
+	}
+
+	.settled-value {
+		font-weight: 600;
+	}
+
+	.settle-btn {
+		padding: 0.25rem 0.5rem;
+		background: transparent;
+		border: 1px solid #fbbf24;
+		border-radius: 4px;
+		color: #fbbf24;
+		font-size: 0.75rem;
+		font-weight: 600;
+		margin-left: 0.125rem;
+	}
+
+	.settle-btn:hover {
+		background: rgba(251, 191, 36, 0.15);
+	}
+
+	/* Depth panel */
+	.depth-row td {
+		padding: 0;
+		border-bottom: 1px solid #222;
+	}
+
+	.depth-panel {
+		display: flex;
+		gap: 1px;
+		background: #222;
+		margin: 0 0.5rem 0.5rem 0.5rem;
+		border-radius: 0 0 8px 8px;
+		overflow: hidden;
+	}
+
+	.depth-side {
+		flex: 1;
+		background: #0f0f0f;
+		padding: 0.5rem 0.75rem;
+	}
+
+	.depth-title {
+		font-size: 0.625rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: #555;
+		margin-bottom: 0.375rem;
+	}
+
+	.depth-level {
+		display: flex;
+		justify-content: space-between;
+		padding: 0.1875rem 0;
+		font-size: 0.8125rem;
+	}
+
+	.depth-price {
+		font-weight: 500;
+	}
+
+	.depth-price.bid {
+		color: #4ade80;
+	}
+
+	.depth-price.ask {
+		color: #f87171;
+	}
+
+	.depth-size {
+		color: #888;
+	}
+
+	.depth-empty {
+		color: #444;
+		font-size: 0.75rem;
+		font-style: italic;
+	}
+
+	/* Settlement form */
+	.settlement-row td {
+		padding: 0;
+		border-bottom: 1px solid #222;
+	}
+
+	.settlement-form {
+		background: #0f0f0f;
+		padding: 1rem;
+		border-radius: 0 0 8px 8px;
+		margin: 0 0.5rem 0.5rem 0.5rem;
+		border: 1px solid #fbbf24;
+		border-top: none;
+	}
+
+	.settlement-form h4 {
+		margin: 0 0 0.5rem 0;
+		color: #fbbf24;
+		font-size: 0.9375rem;
+	}
+
+	.settlement-hint {
+		margin: 0 0 0.75rem 0;
+		color: #888;
+		font-size: 0.8125rem;
+	}
+
+	.settlement-inputs {
+		display: flex;
+		align-items: flex-end;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+
+	.settlement-inputs label {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+		font-size: 0.75rem;
+		color: #888;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.settlement-inputs input {
+		width: 120px;
+		padding: 0.5rem;
+		border: 1px solid #fbbf24;
+		border-radius: 6px;
+		background: #1a1a1a;
+		color: #fff;
+		font-size: 0.875rem;
+		text-align: center;
+	}
+
+	.settlement-inputs input:focus {
+		outline: none;
+		border-color: #fbbf24;
+		box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.3);
+	}
+
+	.settlement-inputs button.primary {
+		padding: 0.5rem 1rem;
+		background: #fbbf24;
+		color: #000;
+		border: none;
+		border-radius: 6px;
+		font-size: 0.875rem;
+		font-weight: 600;
+	}
+
+	.settlement-inputs button.primary:hover:not(:disabled) {
+		background: #f59e0b;
+	}
+
+	.settlement-inputs button.primary:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.settlement-inputs button.secondary {
+		padding: 0.5rem 1rem;
+		background: transparent;
+		color: #888;
+		border: 1px solid #333;
+		border-radius: 6px;
+		font-size: 0.875rem;
+	}
+
+	.settlement-inputs button.secondary:hover:not(:disabled) {
+		border-color: #555;
+		color: #aaa;
+	}
+
+	/* Order entry */
 	.order-entry-row td {
 		padding: 0;
 		border-bottom: 1px solid #222;

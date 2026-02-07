@@ -1,0 +1,11 @@
+{
+  "version": "0.1.0",
+  "name": "marketmaker",
+  "dependencies": {
+    "@supabase/supabase-js": {
+      "version": "2.94.1",
+      "resolved": "https://registry.npmjs.org/@supabase/supabase-js/-/supabase-js-2.94.1.tgz",
+      "overridden": false
+    }
+  }
+}

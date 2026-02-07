@@ -3,6 +3,9 @@ import { supabase } from '$lib/supabase';
 import type { PageLoad } from './$types';
 import type { Market, Participant, Asset, Order } from '$lib/types/database';
 
+// Disable SSR - this page uses browser-only Supabase client
+export const ssr = false;
+
 export const load: PageLoad = async ({ params, url }) => {
 	const code = params.code;
 	const participantToken = url.searchParams.get('p');
