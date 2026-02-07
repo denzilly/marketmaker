@@ -11,6 +11,7 @@
 	import SaveLinkModal from '$lib/components/SaveLinkModal.svelte';
 	import SettleUpModal from '$lib/components/SettleUpModal.svelte';
 	import AdminPanel from '$lib/components/AdminPanel.svelte';
+	import HelpPanel from '$lib/components/HelpPanel.svelte';
 
 	export let data;
 
@@ -19,6 +20,7 @@
 	let showSaveLinkModal = false;
 	let showSettleUpModal = false;
 	let showAdminPanel = false;
+	let showHelp = false;
 	const SEEN_KEY = `mm_seen_${data.participant.token}`;
 
 	let orderSound: HTMLAudioElement;
@@ -218,6 +220,10 @@
 	/>
 {/if}
 
+{#if showHelp}
+	<HelpPanel on:close={() => (showHelp = false)} />
+{/if}
+
 {#if showSettleUpModal}
 	<SettleUpModal
 		trades={data.trades}
@@ -246,6 +252,9 @@
 			</button>
 			<button class="link-btn" on:click={() => (showSaveLinkModal = true)}>
 				My Link
+			</button>
+			<button class="help-btn" on:click={() => (showHelp = true)}>
+				?
 			</button>
 		</div>
 	</header>
@@ -381,6 +390,26 @@
 	}
 
 	.link-btn:hover {
+		border-color: #3d5078;
+		color: #8498b5;
+	}
+
+	.help-btn {
+		background: transparent;
+		border: 1px solid #243254;
+		color: #607a9c;
+		width: 2rem;
+		height: 2rem;
+		border-radius: 50%;
+		font-size: 0.875rem;
+		font-weight: 600;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+	}
+
+	.help-btn:hover {
 		border-color: #3d5078;
 		color: #8498b5;
 	}
