@@ -36,13 +36,13 @@
 			const mark_price = is_settled ? asset.settlement_value : asset.last_price;
 
 			const pnl =
-				mark_price !== null && net_position !== 0
-					? cash_flow + net_position * mark_price
-					: null;
+				net_position === 0
+					? (cash_flow !== 0 ? cash_flow : null)
+					: (mark_price !== null ? cash_flow + net_position * mark_price : null);
 
 			return { asset, net_position, cash_flow, pnl, is_settled } as ComputedPosition;
 		})
-		.filter((p) => p.net_position !== 0);
+		.filter((p) => p.net_position !== 0 || p.cash_flow !== 0);
 </script>
 
 <div class="position-blotter">
@@ -76,7 +76,7 @@
 						>
 							{#if pos.pnl !== null}
 								{pos.pnl > 0 ? '+' : ''}{pos.pnl.toFixed(2)}
-								<span class="pnl-label">{pos.is_settled ? 'realized' : 'unrealized'}</span>
+								<span class="pnl-label">{pos.is_settled || pos.net_position === 0 ? 'realized' : 'unrealized'}</span>
 							{:else}
 								-
 							{/if}
@@ -94,7 +94,7 @@
 	}
 
 	.empty {
-		color: #666;
+		color: #435a80;
 		text-align: center;
 		padding: 1rem;
 	}
@@ -110,14 +110,14 @@
 		font-size: 0.75rem;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: #666;
-		border-bottom: 1px solid #333;
+		color: #435a80;
+		border-bottom: 1px solid #243254;
 	}
 
 	td {
 		padding: 0.5rem;
 		font-size: 0.875rem;
-		border-bottom: 1px solid #222;
+		border-bottom: 1px solid #1a2744;
 	}
 
 	.asset {
@@ -165,12 +165,12 @@
 		display: block;
 		font-size: 0.625rem;
 		font-weight: 400;
-		color: #666;
+		color: #435a80;
 		text-transform: uppercase;
 		letter-spacing: 0.03em;
 	}
 
 	tr.settled-row td.asset {
-		color: #aaa;
+		color: #8498b5;
 	}
 </style>

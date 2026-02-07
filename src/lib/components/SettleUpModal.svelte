@@ -154,7 +154,7 @@
 	.overlay {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.7);
+		background: rgba(6, 10, 24, 0.85);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -162,8 +162,8 @@
 	}
 
 	.modal {
-		background: #1a1a1a;
-		border: 1px solid #333;
+		background: #111b2e;
+		border: 1px solid #243254;
 		border-radius: 12px;
 		width: 90%;
 		max-width: 480px;
@@ -176,7 +176,7 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 1rem 1.25rem;
-		border-bottom: 1px solid #333;
+		border-bottom: 1px solid #243254;
 	}
 
 	.modal-header h3 {
@@ -187,16 +187,16 @@
 
 	.close-btn {
 		background: transparent;
-		border: 1px solid #444;
+		border: 1px solid #2e3e66;
 		border-radius: 4px;
-		color: #888;
+		color: #607a9c;
 		padding: 0.25rem 0.5rem;
 		font-size: 0.75rem;
 	}
 
 	.close-btn:hover {
-		border-color: #666;
-		color: #aaa;
+		border-color: #435a80;
+		color: #8498b5;
 	}
 
 	.modal-body {
@@ -204,13 +204,13 @@
 	}
 
 	.empty {
-		color: #666;
+		color: #435a80;
 		text-align: center;
 		padding: 1rem 0;
 	}
 
 	.subtitle {
-		color: #888;
+		color: #607a9c;
 		font-size: 0.8125rem;
 		margin: 0 0 1rem 0;
 	}
@@ -227,9 +227,9 @@
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.75rem;
-		background: #0f0f0f;
+		background: #0a1020;
 		border-radius: 8px;
-		border: 1px solid #222;
+		border: 1px solid #1a2744;
 	}
 
 	.from {
@@ -239,7 +239,7 @@
 	}
 
 	.arrow {
-		color: #555;
+		color: #3d5078;
 		font-size: 0.75rem;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
@@ -261,13 +261,13 @@
 	}
 
 	.balances {
-		border-top: 1px solid #333;
+		border-top: 1px solid #243254;
 		padding-top: 1rem;
 	}
 
 	.balances h4 {
 		margin: 0 0 0.75rem 0;
-		color: #888;
+		color: #607a9c;
 		font-size: 0.75rem;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
@@ -280,7 +280,7 @@
 	}
 
 	.name {
-		color: #aaa;
+		color: #8498b5;
 		font-size: 0.875rem;
 	}
 

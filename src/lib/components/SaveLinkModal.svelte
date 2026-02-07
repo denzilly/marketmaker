@@ -42,7 +42,7 @@
 	.modal-backdrop {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.7);
+		background: rgba(6, 10, 24, 0.85);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -50,8 +50,8 @@
 	}
 
 	.modal {
-		background: #1a1a1a;
-		border: 1px solid #333;
+		background: #111b2e;
+		border: 1px solid #243254;
 		border-radius: 12px;
 		padding: 2rem;
 		max-width: 500px;
@@ -65,7 +65,7 @@
 	}
 
 	p {
-		color: #888;
+		color: #607a9c;
 		margin: 0 0 1.5rem 0;
 		font-size: 0.9375rem;
 		line-height: 1.5;
@@ -80,17 +80,17 @@
 	input {
 		flex: 1;
 		padding: 0.75rem;
-		background: #0f0f0f;
-		border: 1px solid #333;
+		background: #0a1020;
+		border: 1px solid #243254;
 		border-radius: 8px;
-		color: #6eb5ff;
+		color: #7ec8ff;
 		font-family: monospace;
 		font-size: 0.875rem;
 	}
 
 	.copy-btn {
 		padding: 0.75rem 1rem;
-		background: #333;
+		background: #243254;
 		border: none;
 		border-radius: 8px;
 		color: #fff;
@@ -99,7 +99,7 @@
 	}
 
 	.copy-btn:hover {
-		background: #444;
+		background: #2e3e66;
 	}
 
 	.continue-btn {

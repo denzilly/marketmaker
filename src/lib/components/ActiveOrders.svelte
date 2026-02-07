@@ -65,39 +65,46 @@
 	{#if myOrders.length === 0}
 		<p class="empty">No active orders.</p>
 	{:else}
-		<div class="header-row">
-			<button
-				class="cancel-all-btn"
-				on:click={cancelAllOrders}
-				disabled={cancellingAll}
-			>
-				{cancellingAll ? 'Cancelling...' : 'Cancel All'}
-			</button>
-		</div>
-		<ul>
-			{#each myOrders as order}
-				<li>
-					<div class="order-info">
-						<span class="asset-name">{getAssetName(order.asset_id)}</span>
-						<span class="order-detail">
-							<span class:bid={order.side === 'buy'} class:ask={order.side === 'sell'}>
-								{order.side === 'buy' ? 'BID' : 'OFFER'}
-							</span>
-							<span class="size">{order.remaining_size}</span>
-							<span class="at">@</span>
-							<span class="price">{order.price}</span>
-						</span>
-					</div>
-					<button
-						class="cancel-btn"
-						on:click={() => cancelOrder(order)}
-						disabled={cancelling === order.id}
-					>
-						{cancelling === order.id ? '...' : '✕'}
-					</button>
-				</li>
-			{/each}
-		</ul>
+		<table>
+			<thead>
+				<tr>
+					<th>Asset</th>
+					<th>Side</th>
+					<th>Size</th>
+					<th>Price</th>
+					<th>
+						<button
+							class="cancel-all-btn"
+							on:click={cancelAllOrders}
+							disabled={cancellingAll}
+						>
+							{cancellingAll ? '...' : 'Cancel All'}
+						</button>
+					</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each myOrders as order}
+					<tr>
+						<td class="asset-name">{getAssetName(order.asset_id)}</td>
+						<td class:bid={order.side === 'buy'} class:ask={order.side === 'sell'}>
+							{order.side === 'buy' ? 'BID' : 'OFFER'}
+						</td>
+						<td>{order.remaining_size}</td>
+						<td class="price">{order.price}</td>
+						<td class="cancel-col">
+							<button
+								class="cancel-btn"
+								on:click={() => cancelOrder(order)}
+								disabled={cancelling === order.id}
+							>
+								{cancelling === order.id ? '...' : '✕'}
+							</button>
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
 	{/if}
 </div>
 
@@ -107,47 +114,46 @@
 	}
 
 	.empty {
-		color: #666;
+		color: #435a80;
 		text-align: center;
 		padding: 1rem;
 	}
 
-	ul {
-		list-style: none;
-		margin: 0;
-		padding: 0;
+	table {
+		width: 100%;
+		border-collapse: collapse;
 	}
 
-	li {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 0.5rem;
-		border-bottom: 1px solid #222;
-	}
-
-	li:last-child {
-		border-bottom: none;
-	}
-
-	.order-info {
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-	}
-
-	.asset-name {
-		font-size: 0.8125rem;
-		color: #fff;
+	th {
+		text-align: center;
+		padding: 0.375rem 0.5rem;
+		font-size: 0.75rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: #435a80;
+		border-bottom: 1px solid #243254;
 		font-weight: 500;
 	}
 
-	.order-detail {
-		font-size: 0.75rem;
-		color: #888;
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
+	th:last-child {
+		text-align: right;
+	}
+
+	td {
+		padding: 0.375rem 0.5rem;
+		font-size: 0.8125rem;
+		border-bottom: 1px solid #1a2744;
+		color: #607a9c;
+		text-align: center;
+	}
+
+	tr:last-child td {
+		border-bottom: none;
+	}
+
+	.asset-name {
+		color: #fff;
+		font-weight: 500;
 	}
 
 	.bid {
@@ -164,23 +170,13 @@
 		color: #fff;
 	}
 
-	.at {
-		color: #555;
-	}
-
-	.header-row {
-		display: flex;
-		justify-content: flex-end;
-		margin-bottom: 0.5rem;
-	}
-
 	.cancel-all-btn {
-		padding: 0.25rem 0.75rem;
+		padding: 0.125rem 0.5rem;
 		background: transparent;
-		border: 1px solid #444;
+		border: 1px solid #2e3e66;
 		border-radius: 4px;
-		color: #888;
-		font-size: 0.75rem;
+		color: #607a9c;
+		font-size: 0.6875rem;
 	}
 
 	.cancel-all-btn:hover:not(:disabled) {
@@ -193,12 +189,16 @@
 		cursor: not-allowed;
 	}
 
+	.cancel-col {
+		text-align: right;
+	}
+
 	.cancel-btn {
-		padding: 0.25rem 0.5rem;
+		padding: 0.125rem 0.375rem;
 		background: transparent;
-		border: 1px solid #444;
+		border: 1px solid #2e3e66;
 		border-radius: 4px;
-		color: #888;
+		color: #607a9c;
 		font-size: 0.75rem;
 		line-height: 1;
 	}

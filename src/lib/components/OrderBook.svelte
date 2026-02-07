@@ -302,8 +302,27 @@
 
 	$: canSubmit = (bidPrice && bidSize) || (offerPrice && offerSize);
 
+	function depthBar(size: number, maxSize: number, side: 'bid' | 'ask'): string {
+		const pct = (size / maxSize) * 100;
+		const color = side === 'bid' ? '74,222,128' : '248,113,113';
+		const dir = side === 'bid' ? 'to left' : 'to right';
+		return `background: linear-gradient(${dir}, rgba(${color},0.18) ${pct}%, transparent ${pct}%)`;
+	}
+
+	function aggregateLevels(depthOrders: Order[]): { price: number; size: number }[] {
+		const levels = new Map<number, number>();
+		for (const o of depthOrders) {
+			levels.set(o.price, (levels.get(o.price) ?? 0) + o.remaining_size);
+		}
+		return [...levels.entries()].map(([price, size]) => ({ price, size }));
+	}
+
 	// Group orders by asset
-	$: ordersByAsset = assets.map((asset) => {
+	$: ordersByAsset = [...assets].sort((a, b) => {
+		if (a.status === 'settled' && b.status !== 'settled') return 1;
+		if (a.status !== 'settled' && b.status === 'settled') return -1;
+		return 0;
+	}).map((asset) => {
 		const assetOrders = orders.filter((o) => o.asset_id === asset.id && o.status === 'open');
 		const bids = assetOrders
 			.filter((o) => o.side === 'buy')
@@ -312,14 +331,25 @@
 			.filter((o) => o.side === 'sell')
 			.sort((a, b) => a.price - b.price);
 
+		const depthBids = aggregateLevels(bids.slice(1));
+		const depthAsks = aggregateLevels(asks.slice(1));
+		const maxSize = Math.max(
+			bids[0]?.remaining_size ?? 0,
+			asks[0]?.remaining_size ?? 0,
+			...depthBids.map((d) => d.size),
+			...depthAsks.map((d) => d.size),
+			1
+		);
+
 		return {
 			asset,
 			topBid: bids[0] ?? null,
 			topAsk: asks[0] ?? null,
 			bids,
 			asks,
-			depthBids: bids.slice(1),
-			depthAsks: asks.slice(1)
+			depthBids,
+			depthAsks,
+			maxSize
 		};
 	});
 
@@ -389,7 +419,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each ordersByAsset as { asset, topBid, topAsk, depthBids, depthAsks }}
+				{#each ordersByAsset as { asset, topBid, topAsk, depthBids, depthAsks, maxSize }}
 					<tr
 						class:has-sub-row={orderEntryAssetId === asset.id || depthAssetId === asset.id || settlingAssetId === asset.id}
 						class:settled={asset.status === 'settled'}
@@ -455,7 +485,7 @@
 									class:active={orderEntryAssetId === asset.id}
 									title="Add order"
 								>+</button>
-								{#if depthBids.length > 0 || depthAsks.length > 0}
+								{#if depthBids.length > 0 || depthAsks.length > 0 || depthAssetId === asset.id}
 									<button
 										class="depth-btn"
 										on:click={() => toggleDepth(asset.id)}
@@ -468,38 +498,33 @@
 					</tr>
 
 					{#if depthAssetId === asset.id && asset.status !== 'settled'}
-						<tr class="depth-row">
-							<td colspan="6">
-								<div class="depth-panel">
-									<div class="depth-side bids-side">
-										<div class="depth-title">Bids</div>
-										{#if depthBids.length === 0}
-											<div class="depth-empty">No more bids</div>
-										{:else}
-											{#each depthBids as bid}
-												<div class="depth-level">
-													<span class="depth-size">{bid.remaining_size}</span>
-													<span class="depth-price bid">{bid.price}</span>
-												</div>
-											{/each}
+						{@const maxDepth = Math.max(depthBids.length, depthAsks.length)}
+						{#if maxDepth === 0}
+							<tr class="depth-row depth-last">
+								<td class="asset-col"></td>
+								<td colspan="4" class="depth-empty-msg">No additional orders</td>
+								<td class="actions-col"></td>
+							</tr>
+						{:else}
+							{#each Array(maxDepth) as _, i}
+								<tr class="depth-row" class:depth-last={i === maxDepth - 1}>
+									<td class="asset-col"></td>
+									<td class="size-col">{depthBids[i]?.size ?? ''}</td>
+									<td class="bid-col" style={depthBids[i] ? depthBar(depthBids[i].size, maxSize, 'bid') : ''}>
+										{#if depthBids[i]}
+											<span class="depth-price bid">{depthBids[i].price}</span>
 										{/if}
-									</div>
-									<div class="depth-side asks-side">
-										<div class="depth-title">Asks</div>
-										{#if depthAsks.length === 0}
-											<div class="depth-empty">No more asks</div>
-										{:else}
-											{#each depthAsks as ask}
-												<div class="depth-level">
-													<span class="depth-price ask">{ask.price}</span>
-													<span class="depth-size">{ask.remaining_size}</span>
-												</div>
-											{/each}
+									</td>
+									<td class="ask-col" style={depthAsks[i] ? depthBar(depthAsks[i].size, maxSize, 'ask') : ''}>
+										{#if depthAsks[i]}
+											<span class="depth-price ask">{depthAsks[i].price}</span>
 										{/if}
-									</div>
-								</div>
-							</td>
-						</tr>
+									</td>
+									<td class="size-col">{depthAsks[i]?.size ?? ''}</td>
+									<td class="actions-col"></td>
+								</tr>
+							{/each}
+						{/if}
 					{/if}
 
 					{#if settlingAssetId === asset.id}
@@ -620,7 +645,7 @@
 	.empty {
 		text-align: center;
 		padding: 2rem;
-		color: #888;
+		color: #607a9c;
 	}
 
 	.create-asset-btn {
@@ -650,8 +675,8 @@
 	}
 
 	.create-form {
-		background: #0f0f0f;
-		border: 1px solid #333;
+		background: #0a1020;
+		border: 1px solid #243254;
 		border-radius: 8px;
 		padding: 1.25rem;
 	}
@@ -666,7 +691,7 @@
 		display: block;
 		margin-bottom: 0.75rem;
 		font-size: 0.75rem;
-		color: #888;
+		color: #607a9c;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 	}
@@ -676,16 +701,16 @@
 		width: 100%;
 		padding: 0.625rem;
 		margin-top: 0.375rem;
-		border: 1px solid #333;
+		border: 1px solid #243254;
 		border-radius: 6px;
-		background: #1a1a1a;
+		background: #111b2e;
 		color: #fff;
 		font-size: 0.875rem;
 	}
 
 	.create-form input:focus {
 		outline: none;
-		border-color: #6eb5ff;
+		border-color: #7ec8ff;
 	}
 
 	.create-form input:disabled {
@@ -722,13 +747,13 @@
 
 	.form-buttons button.secondary {
 		background: transparent;
-		color: #888;
-		border: 1px solid #333;
+		color: #607a9c;
+		border: 1px solid #243254;
 	}
 
 	.form-buttons button.secondary:hover:not(:disabled) {
-		border-color: #555;
-		color: #aaa;
+		border-color: #3d5078;
+		color: #8498b5;
 	}
 
 	.error {
@@ -752,13 +777,13 @@
 		font-size: 0.75rem;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: #666;
-		border-bottom: 1px solid #333;
+		color: #435a80;
+		border-bottom: 1px solid #243254;
 	}
 
 	td {
 		padding: 0.75rem 0.5rem;
-		border-bottom: 1px solid #222;
+		border-bottom: 1px solid #1a2744;
 	}
 
 	.asset-col {
@@ -774,14 +799,26 @@
 
 	.bid-col,
 	.ask-col {
-		width: 80px;
+		width: 120px;
+	}
+
+	.bid-col {
+		text-align: right;
+		padding-right: 0;
+	}
+
+	.ask-col {
+		text-align: left;
+		padding-left: 0;
 	}
 
 	.size-col {
-		width: 50px;
-		color: #888;
+		width: 40px;
+		color: #607a9c;
 		font-size: 0.875rem;
 		text-align: center;
+		padding-left: 0;
+		padding-right: 0;
 	}
 
 	.actions-col {
@@ -790,7 +827,7 @@
 	}
 
 	.price-btn {
-		padding: 0.375rem 0.75rem;
+		padding: 0.375rem 1.25rem;
 		border: none;
 		border-radius: 4px;
 		font-weight: 500;
@@ -830,7 +867,7 @@
 	}
 
 	.no-price {
-		color: #444;
+		color: #2e3e66;
 	}
 
 	/* Action buttons */
@@ -838,17 +875,17 @@
 	.depth-btn {
 		padding: 0.25rem 0.5rem;
 		background: transparent;
-		border: 1px solid #333;
+		border: 1px solid #243254;
 		border-radius: 4px;
-		color: #666;
+		color: #435a80;
 		font-size: 0.75rem;
 		margin-left: 0.125rem;
 	}
 
 	.add-order-btn:hover,
 	.depth-btn:hover {
-		border-color: #555;
-		color: #888;
+		border-color: #3d5078;
+		color: #607a9c;
 	}
 
 	.add-order-btn.active {
@@ -858,9 +895,9 @@
 	}
 
 	.depth-btn.active {
-		background: #333;
-		border-color: #555;
-		color: #aaa;
+		background: #243254;
+		border-color: #3d5078;
+		color: #8498b5;
 	}
 
 	tr.has-sub-row td {
@@ -904,44 +941,33 @@
 		background: rgba(251, 191, 36, 0.15);
 	}
 
-	/* Depth panel */
+	/* Depth rows */
 	.depth-row td {
-		padding: 0;
-		border-bottom: 1px solid #222;
+		padding: 0.25rem 0.5rem;
+		border-bottom: none;
 	}
 
-	.depth-panel {
-		display: flex;
-		gap: 1px;
-		background: #222;
-		margin: 0 0.5rem 0.5rem 0.5rem;
-		border-radius: 0 0 8px 8px;
-		overflow: hidden;
+	.depth-row .size-col {
+		padding: 0.25rem 0;
 	}
 
-	.depth-side {
-		flex: 1;
-		background: #0f0f0f;
-		padding: 0.5rem 0.75rem;
+	.depth-row .bid-col {
+		padding-top: 0.25rem;
+		padding-bottom: 0.25rem;
 	}
 
-	.depth-title {
-		font-size: 0.625rem;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: #555;
-		margin-bottom: 0.375rem;
+	.depth-row .ask-col {
+		padding-top: 0.25rem;
+		padding-bottom: 0.25rem;
 	}
 
-	.depth-level {
-		display: flex;
-		justify-content: space-between;
-		padding: 0.1875rem 0;
-		font-size: 0.8125rem;
+	.depth-row.depth-last td {
+		border-bottom: 1px solid #1a2744;
 	}
 
 	.depth-price {
 		font-weight: 500;
+		font-size: 0.8125rem;
 	}
 
 	.depth-price.bid {
@@ -952,24 +978,22 @@
 		color: #f87171;
 	}
 
-	.depth-size {
-		color: #888;
-	}
-
-	.depth-empty {
-		color: #444;
+	.depth-empty-msg {
+		text-align: center;
+		color: #2e3e66;
 		font-size: 0.75rem;
 		font-style: italic;
+		padding: 0.375rem;
 	}
 
 	/* Settlement form */
 	.settlement-row td {
 		padding: 0;
-		border-bottom: 1px solid #222;
+		border-bottom: 1px solid #1a2744;
 	}
 
 	.settlement-form {
-		background: #0f0f0f;
+		background: #0a1020;
 		padding: 1rem;
 		border-radius: 0 0 8px 8px;
 		margin: 0 0.5rem 0.5rem 0.5rem;
@@ -985,7 +1009,7 @@
 
 	.settlement-hint {
 		margin: 0 0 0.75rem 0;
-		color: #888;
+		color: #607a9c;
 		font-size: 0.8125rem;
 	}
 
@@ -1001,7 +1025,7 @@
 		flex-direction: column;
 		gap: 0.375rem;
 		font-size: 0.75rem;
-		color: #888;
+		color: #607a9c;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 	}
@@ -1011,7 +1035,7 @@
 		padding: 0.5rem;
 		border: 1px solid #fbbf24;
 		border-radius: 6px;
-		background: #1a1a1a;
+		background: #111b2e;
 		color: #fff;
 		font-size: 0.875rem;
 		text-align: center;
@@ -1045,25 +1069,25 @@
 	.settlement-inputs button.secondary {
 		padding: 0.5rem 1rem;
 		background: transparent;
-		color: #888;
-		border: 1px solid #333;
+		color: #607a9c;
+		border: 1px solid #243254;
 		border-radius: 6px;
 		font-size: 0.875rem;
 	}
 
 	.settlement-inputs button.secondary:hover:not(:disabled) {
-		border-color: #555;
-		color: #aaa;
+		border-color: #3d5078;
+		color: #8498b5;
 	}
 
 	/* Order entry */
 	.order-entry-row td {
 		padding: 0;
-		border-bottom: 1px solid #222;
+		border-bottom: 1px solid #1a2744;
 	}
 
 	.order-entry {
-		background: #0f0f0f;
+		background: #0a1020;
 		padding: 1rem;
 		border-radius: 0 0 8px 8px;
 		margin: 0 0.5rem 0.5rem 0.5rem;
@@ -1085,7 +1109,7 @@
 		flex-direction: column;
 		gap: 0.375rem;
 		font-size: 0.75rem;
-		color: #888;
+		color: #607a9c;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 	}
@@ -1093,17 +1117,26 @@
 	.order-form input {
 		width: 80px;
 		padding: 0.5rem;
-		border: 1px solid #333;
+		border: 1px solid #243254;
 		border-radius: 6px;
-		background: #1a1a1a;
+		background: #111b2e;
 		color: #fff;
 		font-size: 0.875rem;
 		text-align: center;
+		-moz-appearance: textfield;
+		appearance: textfield;
+	}
+
+	.order-form input::-webkit-inner-spin-button,
+	.order-form input::-webkit-outer-spin-button {
+		-webkit-appearance: none;
+		appearance: none;
+		margin: 0;
 	}
 
 	.order-form input:focus {
 		outline: none;
-		border-color: #6eb5ff;
+		border-color: #7ec8ff;
 	}
 
 	.order-form input:disabled {

@@ -77,10 +77,5 @@ Using Supabase real-time subscriptions for live updates on:
 ### UI Improvements
 #### order book
 
+- The arrow button should still be visible if the extended order book depth is open. We now ahve a case where someone can cancel their orders, which removes everything, but the deep order book is stuck open (because the button dissappears if there are no additional orders)
 
-- the order of items should be size bid ask size
-- the green and red buttons on the top of book should be clickable buttons to trade immediately in size 1
-- there should be a separate button to add a new order for an asset (small + button) instead of the down arrow 
-- the down arrow should uncollapse all orders under the top of book order, so that the user can see the depth of the order book
-- these lower bids and higher offers in the uncollapsed order book are not clickable, but the user can still trade on them by entering a bid or offer that is beyond TOB. (e.g. if there are offers at 5 6 an 7, the user can bid 8 in size 3 to lift all of the offers.)
-- the asset info appears in a tooltip on hover over the asset name

@@ -286,8 +286,8 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 1rem 1.5rem;
-		background: #1a1a1a;
-		border-bottom: 1px solid #333;
+		background: #111b2e;
+		border-bottom: 1px solid #243254;
 	}
 
 	.header-left {
@@ -304,8 +304,8 @@
 
 	.market-code {
 		font-size: 0.875rem;
-		color: #6eb5ff;
-		background: #1e3a5f;
+		color: #7ec8ff;
+		background: #162e50;
 		padding: 0.25rem 0.75rem;
 		border-radius: 4px;
 	}
@@ -317,7 +317,7 @@
 	}
 
 	.participant-name {
-		color: #aaa;
+		color: #8498b5;
 		font-size: 0.875rem;
 	}
 
@@ -333,16 +333,16 @@
 
 	.link-btn {
 		background: transparent;
-		border: 1px solid #333;
-		color: #888;
+		border: 1px solid #243254;
+		color: #607a9c;
 		padding: 0.5rem 1rem;
 		border-radius: 6px;
 		font-size: 0.875rem;
 	}
 
 	.link-btn:hover {
-		border-color: #555;
-		color: #aaa;
+		border-color: #3d5078;
+		color: #8498b5;
 	}
 
 	.settle-up-btn {
@@ -371,14 +371,14 @@
 		font-size: 0.875rem;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: #888;
+		color: #607a9c;
 		margin: 0 0 1rem 0;
 	}
 
 	.orderbook-section {
-		background: #1a1a1a;
+		background: #111b2e;
 		border-radius: 12px;
-		border: 1px solid #333;
+		border: 1px solid #243254;
 		padding: 1rem;
 	}
 
@@ -391,9 +391,9 @@
 	.positions-section,
 	.orders-section,
 	.trades-section {
-		background: #1a1a1a;
+		background: #111b2e;
 		border-radius: 12px;
-		border: 1px solid #333;
+		border: 1px solid #243254;
 		padding: 1rem;
 	}
 

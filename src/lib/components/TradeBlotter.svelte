@@ -62,7 +62,7 @@
 	}
 
 	.empty {
-		color: #666;
+		color: #435a80;
 		text-align: center;
 		padding: 1rem;
 	}
@@ -75,7 +75,7 @@
 
 	li {
 		padding: 0.75rem;
-		border-bottom: 1px solid #222;
+		border-bottom: 1px solid #1a2744;
 	}
 
 	li:last-child {
@@ -95,13 +95,13 @@
 	}
 
 	.time {
-		color: #666;
+		color: #435a80;
 		font-size: 0.75rem;
 	}
 
 	.trade-details {
 		font-size: 0.8125rem;
-		color: #888;
+		color: #607a9c;
 	}
 
 	.buyer {
@@ -118,12 +118,12 @@
 	}
 
 	.size {
-		color: #6eb5ff;
+		color: #7ec8ff;
 	}
 
 	.action,
 	.at,
 	.from {
-		color: #666;
+		color: #435a80;
 	}
 </style>

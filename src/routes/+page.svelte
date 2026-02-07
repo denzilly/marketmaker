@@ -1,22 +1,38 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { generateMarketCode } from '$lib/utils/market-code';
 	import { supabase } from '$lib/supabase';
 
 	let joinCode = '';
 	let playerName = '';
+	let marketName = '';
 	let mode: 'select' | 'create' | 'join' = 'select';
 	let loading = false;
 	let error = '';
 
+	$: sanitizedMarketName = marketName.replace(/\s/g, '').toLowerCase();
+	$: marketNameValid = sanitizedMarketName.length >= 2 && sanitizedMarketName.length <= 30;
+
 	async function createMarket() {
-		if (!playerName.trim()) return;
+		if (!playerName.trim() || !marketNameValid) return;
 
 		loading = true;
 		error = '';
 
 		try {
-			const code = generateMarketCode();
+			const code = sanitizedMarketName;
+
+			// Check if market name already exists
+			const { data: existing } = await supabase
+				.from('markets')
+				.select('id')
+				.eq('code', code)
+				.maybeSingle();
+
+			if (existing) {
+				error = 'A market with that name already exists. Choose a different name.';
+				loading = false;
+				return;
+			}
 
 			// Create market
 			const { data: market, error: marketError } = await supabase
@@ -94,8 +110,9 @@
 
 			// Navigate to market with participant token
 			goto(`/m/${code}?p=${participant.token}`);
-		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to join market';
+		} catch (e: any) {
+			console.error('Join market error:', e);
+			error = e?.message || e?.error_description || JSON.stringify(e);
 		} finally {
 			loading = false;
 		}
@@ -127,6 +144,19 @@
 					<div class="error">{error}</div>
 				{/if}
 				<label>
+					Market Name
+					<input
+						type="text"
+						bind:value={marketName}
+						placeholder="e.g. poker-night"
+						maxlength="30"
+						disabled={loading}
+					/>
+					{#if marketName && sanitizedMarketName !== marketName}
+						<span class="hint">Will be created as: {sanitizedMarketName}</span>
+					{/if}
+				</label>
+				<label>
 					Your Name
 					<input
 						type="text"
@@ -137,7 +167,7 @@
 					/>
 				</label>
 				<div class="button-group">
-					<button class="primary" on:click={createMarket} disabled={!playerName.trim() || loading}>
+					<button class="primary" on:click={createMarket} disabled={!playerName.trim() || !marketNameValid || loading}>
 						{loading ? 'Creating...' : 'Create'}
 					</button>
 					<button class="secondary" on:click={() => { mode = 'select'; error = ''; }} disabled={loading}>
@@ -209,7 +239,7 @@
 	}
 
 	.tagline {
-		color: #888;
+		color: #607a9c;
 		margin-bottom: 2rem;
 	}
 
@@ -220,10 +250,10 @@
 	}
 
 	.form {
-		background: #1a1a1a;
+		background: #111b2e;
 		padding: 2rem;
 		border-radius: 12px;
-		border: 1px solid #333;
+		border: 1px solid #243254;
 	}
 
 	label {
@@ -231,7 +261,14 @@
 		text-align: left;
 		margin-bottom: 1rem;
 		font-size: 0.875rem;
-		color: #aaa;
+		color: #8498b5;
+	}
+
+	.hint {
+		display: block;
+		margin-top: 0.375rem;
+		font-size: 0.75rem;
+		color: #607a9c;
 	}
 
 	input {
@@ -239,16 +276,16 @@
 		width: 100%;
 		padding: 0.75rem;
 		margin-top: 0.5rem;
-		border: 1px solid #333;
+		border: 1px solid #243254;
 		border-radius: 8px;
-		background: #0f0f0f;
+		background: #0a1020;
 		color: #fff;
 		font-size: 1rem;
 	}
 
 	input:focus {
 		outline: none;
-		border-color: #6eb5ff;
+		border-color: #7ec8ff;
 	}
 
 	input:disabled {
@@ -297,12 +334,12 @@
 
 	button.secondary {
 		background: transparent;
-		color: #888;
-		border: 1px solid #333;
+		color: #607a9c;
+		border: 1px solid #243254;
 	}
 
 	button.secondary:hover {
-		border-color: #555;
-		color: #aaa;
+		border-color: #3d5078;
+		color: #8498b5;
 	}
 </style>
