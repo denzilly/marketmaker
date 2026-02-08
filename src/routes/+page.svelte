@@ -224,12 +224,16 @@
 		align-items: center;
 		justify-content: center;
 		padding: 2rem;
+		background: #0a1020;
 	}
 
 	.container {
 		max-width: 400px;
 		width: 100%;
 		text-align: center;
+		background: #111b2e;
+		border: 1px solid #243254;
+		padding: 2.5rem;
 	}
 
 	h1 {
@@ -250,10 +254,8 @@
 	}
 
 	.form {
-		background: #111b2e;
-		padding: 2rem;
-		border-radius: 12px;
-		border: 1px solid #243254;
+		padding: 1.5rem 0 0 0;
+		border-top: 1px solid #243254;
 	}
 
 	label {
@@ -277,7 +279,6 @@
 		padding: 0.75rem;
 		margin-top: 0.5rem;
 		border: 1px solid #243254;
-		border-radius: 8px;
 		background: #0a1020;
 		color: #fff;
 		font-size: 1rem;
@@ -297,7 +298,6 @@
 		border: 1px solid #ef4444;
 		color: #ef4444;
 		padding: 0.75rem;
-		border-radius: 8px;
 		margin-bottom: 1rem;
 		font-size: 0.875rem;
 	}
@@ -311,7 +311,6 @@
 
 	button {
 		padding: 0.875rem 1.5rem;
-		border-radius: 8px;
 		font-size: 1rem;
 		font-weight: 500;
 		border: none;
