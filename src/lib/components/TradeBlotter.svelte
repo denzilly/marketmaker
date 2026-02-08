@@ -33,25 +33,30 @@
 	{#if trades.length === 0}
 		<p class="empty">No trades yet.</p>
 	{:else}
-		<ul>
-			{#each trades as trade (trade.id)}
-				<li>
-					<div class="trade-header">
-						<span class="asset">{getAssetName(trade.asset_id)}</span>
-						<span class="time">{formatTime(trade.executed_at)}</span>
-					</div>
-					<div class="trade-details">
-						<span class="buyer">{getParticipantName(trade.buyer_id)}</span>
-						<span class="action">bought</span>
-						<span class="size">{trade.size}</span>
-						<span class="at">@</span>
-						<span class="price">{trade.price}</span>
-						<span class="from">from</span>
-						<span class="seller">{getParticipantName(trade.seller_id)}</span>
-					</div>
-				</li>
-			{/each}
-		</ul>
+		<table>
+			<thead>
+				<tr>
+					<th>Asset</th>
+					<th>Buyer</th>
+					<th>Size</th>
+					<th>Price</th>
+					<th>Seller</th>
+					<th>Time</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each trades as trade (trade.id)}
+					<tr>
+						<td class="asset">{getAssetName(trade.asset_id)}</td>
+						<td class="buyer">{getParticipantName(trade.buyer_id)}</td>
+						<td class="size">{trade.size}</td>
+						<td class="price">{trade.price}</td>
+						<td class="seller">{getParticipantName(trade.seller_id)}</td>
+						<td class="time">{formatTime(trade.executed_at)}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
 	{/if}
 </div>
 
@@ -67,41 +72,37 @@
 		padding: 1rem;
 	}
 
-	ul {
-		list-style: none;
-		margin: 0;
-		padding: 0;
+	table {
+		width: 100%;
+		border-collapse: collapse;
 	}
 
-	li {
-		padding: 0.75rem;
+	th {
+		text-align: center;
+		padding: 0.375rem 0.5rem;
+		font-size: 0.75rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: #435a80;
+		border-bottom: 1px solid #243254;
+		font-weight: 500;
+	}
+
+	td {
+		padding: 0.375rem 0.5rem;
+		font-size: 0.8125rem;
 		border-bottom: 1px solid #1a2744;
+		color: #607a9c;
+		text-align: center;
 	}
 
-	li:last-child {
+	tr:last-child td {
 		border-bottom: none;
 	}
 
-	.trade-header {
-		display: flex;
-		justify-content: space-between;
-		margin-bottom: 0.25rem;
-	}
-
 	.asset {
-		font-weight: 500;
 		color: #fff;
-		font-size: 0.875rem;
-	}
-
-	.time {
-		color: #435a80;
-		font-size: 0.75rem;
-	}
-
-	.trade-details {
-		font-size: 0.8125rem;
-		color: #607a9c;
+		font-weight: 500;
 	}
 
 	.buyer {
@@ -121,9 +122,15 @@
 		color: #7ec8ff;
 	}
 
-	.action,
-	.at,
-	.from {
+	.time {
 		color: #435a80;
+		font-size: 0.75rem;
+	}
+
+	@media (max-width: 600px) {
+		th, td {
+			padding: 0.25rem 0.375rem;
+			font-size: 0.75rem;
+		}
 	}
 </style>
