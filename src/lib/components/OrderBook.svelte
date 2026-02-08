@@ -842,7 +842,7 @@
 
 	.size-col {
 		width: 40px;
-		color: #607a9c;
+		color: #8498b5;
 		font-size: 0.875rem;
 		text-align: center;
 		padding-left: 0;
@@ -906,17 +906,17 @@
 	.depth-btn {
 		padding: 0.25rem 0.5rem;
 		background: transparent;
-		border: 1px solid #243254;
+		border: 1px solid #3d5078;
 		border-radius: 4px;
-		color: #435a80;
+		color: #8498b5;
 		font-size: 0.75rem;
 		margin-left: 0.125rem;
 	}
 
 	.add-order-btn:hover,
 	.depth-btn:hover {
-		border-color: #3d5078;
-		color: #607a9c;
+		border-color: #5a7aad;
+		color: #c5d0e3;
 	}
 
 	.add-order-btn.active {
