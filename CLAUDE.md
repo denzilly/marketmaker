@@ -20,19 +20,33 @@ MarketMaker lets users create "markets" (sessions) where participants can define
 - [x] Supabase project created and connected
 - [x] Database schema deployed (`supabase/schema.sql`)
 - [x] Landing page UI (create/join market forms)
-- [x] Market page layout (orderbook, trade blotter, position blotter)
-- [x] Placeholder components created
+- [x] Market creation and joining wired to Supabase
+- [x] Market page layout (orderbook, sidebar with positions/orders/trades)
 - [x] Type definitions for all database entities
 - [x] Market code generator ("quick-tiger-moon" style)
-- [x] Save-link modal component
+- [x] Save-link modal component (shown on first visit)
+- [x] Asset creation (name + optional description)
+- [x] Two-way order entry (bid/offer simultaneously)
+- [x] Instant trading (click top-of-book prices to execute 1 contract)
+- [x] Order matching with price-time priority (FIFO), partial fills
+- [x] Order cancellation (individual + bulk "Cancel All")
+- [x] Real-time subscriptions (orders, trades, assets, participants)
+- [x] Position blotter with unrealized P&L (mark-to-market)
+- [x] Trade blotter with full market history
+- [x] Active orders panel
+- [x] Order book depth view (expandable per asset)
+- [x] Asset settlement by admin
+- [x] Settlement calculation / "Settle Up" modal (minimized transfers)
+- [x] Admin panel (view participants, copy personal links)
+- [x] Help panel (user guide)
+- [x] Sound effects (order placed, trade executed)
+- [x] Mobile-responsive design (3 breakpoints)
 
-### Next Steps (in order)
-1. **Wire up market creation/joining** - connect landing page to Supabase, create markets and participants
-2. **Build order entry flow** - let users post bids/offers
-3. **Implement order matching** - execute trades when someone hits a price (FIFO price-time priority)
-4. **Set up real-time subscriptions** - live updates for all participants
-5. **Add asset creation** - let users define new things to trade
-6. **Implement settlement** - admin can settle assets, calculate who owes whom
+### Potential Future Work
+- Improved error handling and edge cases
+- Historical charts / price graphs
+- Market templates or presets
+- Spectator mode
 
 ## Key Concepts
 
@@ -57,27 +71,35 @@ MarketMaker lets users create "markets" (sessions) where participants can define
 ```
 src/
 ├── lib/
-│   ├── components/     # Svelte components
-│   │   ├── OrderBook.svelte
-│   │   ├── TradeBlotter.svelte
-│   │   ├── PositionBlotter.svelte
-│   │   └── SaveLinkModal.svelte
-│   ├── types/          # TypeScript interfaces
+│   ├── components/          # Svelte components
+│   │   ├── OrderBook.svelte       # Order book with asset table, order entry, depth view, settlement
+│   │   ├── TradeBlotter.svelte    # Live feed of all market trades
+│   │   ├── PositionBlotter.svelte # User's positions and P&L
+│   │   ├── ActiveOrders.svelte    # User's open orders with cancel
+│   │   ├── SaveLinkModal.svelte   # "Save your link" prompt on first visit
+│   │   ├── AdminPanel.svelte      # Participant list + copy links (admin)
+│   │   ├── HelpPanel.svelte       # How-to-play guide
+│   │   └── SettleUpModal.svelte   # Settlement calculation (who owes whom)
+│   ├── types/               # TypeScript interfaces
 │   │   └── database.ts
-│   ├── utils/          # Utilities
-│   │   └── market-code.ts
-│   ├── stores/         # Svelte stores (TODO)
-│   ├── supabase.ts     # Supabase client
-│   └── index.ts        # Re-exports
+│   ├── utils/               # Utilities
+│   │   ├── market-code.ts         # 3-word code generator + validator
+│   │   └── order-matching.ts      # FIFO price-time priority matching engine
+│   ├── supabase.ts          # Supabase client
+│   └── index.ts             # Re-exports
 ├── routes/
-│   ├── +layout.svelte  # Root layout
-│   ├── +page.svelte    # Landing page (create/join)
-│   └── m/[code]/       # Market page
-│       ├── +page.svelte
-│       └── +page.ts
-├── app.css             # Global styles
-├── app.html            # HTML shell
-└── app.d.ts            # Type declarations
+│   ├── +layout.svelte       # Root layout
+│   ├── +page.svelte         # Landing page (create/join market)
+│   └── m/[code]/            # Market page
+│       ├── +page.svelte          # Main trading interface
+│       └── +page.ts              # Load function (validate token, fetch data)
+├── app.css                  # Global styles (dark theme)
+├── app.html                 # HTML shell
+└── app.d.ts                 # Type declarations
+static/
+└── sounds/
+    ├── order.mp3            # Sound on order placement
+    └── trade.mp3            # Sound on trade execution
 ```
 
 ## Database Schema

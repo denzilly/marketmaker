@@ -66,16 +66,78 @@ There should be a small blotter that shows the user's current position in any of
 
 ### Real-time Updates
 Using Supabase real-time subscriptions for live updates on:
-- Order book changes
-- New trades
-- Asset updates
-- Participant joins
+- Order book changes (INSERT, UPDATE, DELETE on `orders`)
+- New trades (INSERT on `trades`)
+- Asset updates (INSERT, UPDATE on `assets` — new assets, price changes, settlements)
+- Participant joins (INSERT on `participants`)
 
+### Sound Effects
+- `order.mp3` plays on order placement
+- `trade.mp3` plays on trade execution
 
+## Implemented Features
 
+### Landing Page
+- Three-mode UI: initial selection screen → Create Market form or Join Market form
+- Create: enter market name (sanitized to lowercase, 2-30 chars) + player name → generates 3-word code, creates market + admin participant
+- Join: enter market code + player name → validates code, creates participant
+- Redirects to `/m/[code]?p=[token]&first=true` on success
 
-### UI Improvements
-#### order book
+### Market Page Layout
+- **Header**: MarketMaker title, market code badge, player name, admin badge, Settle Up button, My Link button, Help button
+- **Main grid**: Order book (left, 2/3 width) + sidebar (right, 350px)
+- **Sidebar sections**: My Positions (top), My Orders (middle), Recent Trades (bottom, scrollable)
+- **Responsive**: single column at 900px, stacked at 600px
 
-- The arrow button should still be visible if the extended order book depth is open. We now ahve a case where someone can cancel their orders, which removes everything, but the deep order book is stuck open (because the button dissappears if there are no additional orders)
+### Order Book (`OrderBook.svelte`)
+- Asset table showing each asset with top-of-book bid/ask as clickable buttons
+- Size aggregation at top of book
+- "+ New Asset" form (name + optional description)
+- Expandable depth view per asset (stacked bar visualization for price levels)
+- Two-way order entry (bid and offer simultaneously, validated: 1 decimal max, positive size, bid < offer)
+- Instant trade: clicking a price button executes 1 contract immediately
+- Settlement form (admin only): enter settlement value, cancels all open orders
+
+### Active Orders (`ActiveOrders.svelte`)
+- Table of user's open orders (side, size, price)
+- Individual cancel buttons + "Cancel All" bulk action
+
+### Position Blotter (`PositionBlotter.svelte`)
+- Net position and P&L per asset, computed from trades
+- Mark-to-market against last_price (unrealized) or settlement_value (realized)
+- Color coded: green for long, red for short
+
+### Trade Blotter (`TradeBlotter.svelte`)
+- Reverse-chronological feed of all market trades
+- Format: "Buyer bought Size @ Price from Seller"
+- Color coded buyer (green) and seller (red)
+
+### Settle Up Modal (`SettleUpModal.svelte`)
+- Computes realized P&L per participant across settled assets
+- Greedy algorithm to minimize number of transfers
+- Displays who pays whom + net P&L table
+
+### Admin Panel (`AdminPanel.svelte`)
+- Lists all participants with role badges
+- Copy personal link for each participant
+
+### Help Panel (`HelpPanel.svelte`)
+- In-app user guide covering all features
+
+### Save Link Modal (`SaveLinkModal.svelte`)
+- Shown on first visit, prompts user to copy their personal link
+- Tracks seen status via localStorage (`mm_seen_[token]`)
+
+## Visual Design
+
+### Color Scheme (Dark Theme)
+- Background: `#0a1020`, Cards: `#111b2e`, Borders: `#243254`
+- Text: `#c5d0e3` (primary), `#8498b5` (secondary), `#607a9c` (muted)
+- Bids: `#f87171` (red), Asks: `#4ade80` (green)
+- Admin/Settlement: `#fbbf24` (yellow), Primary actions: `#2563eb` (blue)
+- Font: JetBrains Mono / Fira Code / monospace
+
+## Known Issues / UI Improvements
+### Order Book
+- The depth toggle arrow button should remain visible when the depth view is open, even if all orders at deeper levels are cancelled (currently the button disappears if there are no additional orders behind top of book)
 
