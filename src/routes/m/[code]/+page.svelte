@@ -16,6 +16,8 @@
 	export let data;
 
 	let channel: RealtimeChannel | null = null;
+	let reconnectTimer: ReturnType<typeof setInterval> | null = null;
+	let connectionStatus: 'connected' | 'reconnecting' | 'error' = 'connected';
 
 	let showSaveLinkModal = false;
 	let showSettleUpModal = false;
@@ -126,7 +128,50 @@
 					}
 				}
 			)
-			.subscribe();
+			.subscribe((status, err) => {
+				if (status === 'SUBSCRIBED') {
+					connectionStatus = 'connected';
+				} else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+					console.warn('Realtime channel issue:', status, err);
+					connectionStatus = 'reconnecting';
+					scheduleReconnect();
+				}
+			});
+	}
+
+	async function reconnect() {
+		// Tear down old channel
+		if (channel) {
+			supabase.removeChannel(channel);
+			channel = null;
+		}
+
+		// Re-fetch fresh state from DB to catch anything missed while disconnected
+		try {
+			const assetIds = data.assets.map(a => a.id);
+			const [ordersRes, tradesRes, assetsRes] = await Promise.all([
+				supabase.from('orders').select('*').in('asset_id', assetIds).eq('status', 'open').order('created_at', { ascending: true }),
+				supabase.from('trades').select('id, asset_id, buyer_id, seller_id, price, size, executed_at').in('asset_id', assetIds).order('executed_at', { ascending: false }).limit(50),
+				supabase.from('assets').select('*').eq('market_id', data.market.id)
+			]);
+
+			if (assetsRes.data) data.assets = assetsRes.data as any;
+			if (ordersRes.data) data.orders = ordersRes.data as any;
+			if (tradesRes.data) data.trades = tradesRes.data;
+		} catch (e) {
+			console.error('Failed to refresh data on reconnect:', e);
+		}
+
+		// Re-subscribe
+		setupSubscriptions();
+	}
+
+	function scheduleReconnect() {
+		if (reconnectTimer) return;
+		reconnectTimer = setTimeout(() => {
+			reconnectTimer = null;
+			reconnect();
+		}, 3000) as ReturnType<typeof setTimeout>;
 	}
 
 	onMount(() => {
@@ -145,6 +190,9 @@
 	onDestroy(() => {
 		if (channel) {
 			supabase.removeChannel(channel);
+		}
+		if (reconnectTimer) {
+			clearTimeout(reconnectTimer);
 		}
 	});
 
@@ -238,6 +286,11 @@
 		<div class="header-left">
 			<h1>MarketMaker</h1>
 			<span class="market-code">{data.market.code}</span>
+			{#if connectionStatus !== 'connected'}
+				<span class="connection-status" class:reconnecting={connectionStatus === 'reconnecting'}>
+					{connectionStatus === 'reconnecting' ? 'Reconnecting...' : 'Connection lost'}
+				</span>
+			{/if}
 		</div>
 		<div class="header-right">
 			<span class="participant-name">{data.participant.name}</span>
@@ -343,6 +396,19 @@
 		background: #162e50;
 		padding: 0.25rem 0.75rem;
 		border-radius: 4px;
+	}
+
+	.connection-status {
+		font-size: 0.75rem;
+		color: #ef4444;
+		background: rgba(239, 68, 68, 0.15);
+		padding: 0.25rem 0.5rem;
+		border-radius: 4px;
+	}
+
+	.connection-status.reconnecting {
+		color: #fbbf24;
+		background: rgba(251, 191, 36, 0.15);
 	}
 
 	.header-right {

@@ -11,6 +11,7 @@
 
 	let cancelling: string | null = null;
 	let cancellingAll = false;
+	let cancelError = '';
 
 	// Filter to only this user's open orders
 	$: myOrders = orders
@@ -23,20 +24,27 @@
 
 	async function cancelAllOrders() {
 		cancellingAll = true;
+		cancelError = '';
 		try {
 			const ids = myOrders.map((o) => o.id);
-			const { error } = await supabase
+			const { error, data: deleted } = await supabase
 				.from('orders')
 				.delete()
-				.in('id', ids);
+				.in('id', ids)
+				.select('id');
 
 			if (error) throw error;
+
+			if (!deleted || deleted.length === 0) {
+				cancelError = 'Orders may have already been filled or cancelled.';
+			}
 
 			for (const order of myOrders) {
 				dispatch('orderCancelled', order);
 			}
 		} catch (e) {
 			console.error('Failed to cancel all orders:', e);
+			cancelError = 'Failed to cancel orders. Try refreshing the page.';
 		} finally {
 			cancellingAll = false;
 		}
@@ -44,17 +52,25 @@
 
 	async function cancelOrder(order: Order) {
 		cancelling = order.id;
+		cancelError = '';
 		try {
-			const { error } = await supabase
+			const { error, data: deleted } = await supabase
 				.from('orders')
 				.delete()
-				.eq('id', order.id);
+				.eq('id', order.id)
+				.select('id');
 
 			if (error) throw error;
 
+			if (!deleted || deleted.length === 0) {
+				cancelError = 'Order may have already been filled or cancelled.';
+			}
+
+			// Remove from local state either way
 			dispatch('orderCancelled', order);
 		} catch (e) {
 			console.error('Failed to cancel order:', e);
+			cancelError = 'Failed to cancel order. Try refreshing the page.';
 		} finally {
 			cancelling = null;
 		}
@@ -62,6 +78,9 @@
 </script>
 
 <div class="active-orders">
+	{#if cancelError}
+		<div class="cancel-error">{cancelError}</div>
+	{/if}
 	{#if myOrders.length === 0}
 		<p class="empty">No active orders.</p>
 	{:else}
@@ -117,6 +136,15 @@
 		color: #435a80;
 		text-align: center;
 		padding: 1rem;
+	}
+
+	.cancel-error {
+		background: rgba(239, 68, 68, 0.1);
+		border: 1px solid #ef4444;
+		color: #ef4444;
+		padding: 0.5rem 0.75rem;
+		margin-bottom: 0.5rem;
+		font-size: 0.8125rem;
 	}
 
 	table {

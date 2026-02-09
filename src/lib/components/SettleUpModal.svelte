@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
-	import type { Asset, Trade, Participant } from '$lib/types/database';
+	import type { Asset, Participant } from '$lib/types/database';
 
-	export let trades: Trade[] = [];
+	export let trades: Array<{ id: string; asset_id: string; buyer_id: string; seller_id: string; price: number; size: number; executed_at: string }> = [];
 	export let assets: Asset[] = [];
 	export let participants: Pick<Participant, 'id' | 'name'>[] = [];
 
