@@ -1,7 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import { supabase } from '$lib/supabase';
 import type { PageLoad } from './$types';
-import type { Market, Participant, Asset, Order } from '$lib/types/database';
+import type { Market, Participant, Asset, Order, Message } from '$lib/types/database';
 
 // Disable SSR - this page uses browser-only Supabase client
 export const ssr = false;
@@ -87,6 +87,15 @@ export const load: PageLoad = async ({ params, url }) => {
 		trades = tradeData ?? [];
 	}
 
+	// Load chat messages for this market
+	const { data: messageData } = await supabase
+		.from('messages')
+		.select('*')
+		.eq('market_id', market.id)
+		.order('created_at', { ascending: true })
+		.limit(100);
+	const messages = (messageData ?? []) as Message[];
+
 	// Check if this is a first visit (show save link modal)
 	const isFirstVisit = url.searchParams.get('first') !== 'false';
 
@@ -97,6 +106,7 @@ export const load: PageLoad = async ({ params, url }) => {
 		assets: (assets ?? []) as Asset[],
 		orders,
 		trades,
+		messages,
 		isFirstVisit
 	};
 };

@@ -69,6 +69,15 @@ CREATE TABLE trades (
     executed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Chat messages
+CREATE TABLE messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    market_id UUID NOT NULL REFERENCES markets(id) ON DELETE CASCADE,
+    participant_id UUID NOT NULL REFERENCES participants(id),
+    content TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- ============================================
 -- INDEXES
 -- ============================================
@@ -80,6 +89,8 @@ CREATE INDEX idx_orders_asset ON orders(asset_id);
 CREATE INDEX idx_orders_status ON orders(status) WHERE status = 'open';
 CREATE INDEX idx_trades_asset ON trades(asset_id);
 CREATE INDEX idx_trades_executed ON trades(executed_at DESC);
+CREATE INDEX idx_messages_market ON messages(market_id);
+CREATE INDEX idx_messages_created ON messages(created_at);
 
 -- ============================================
 -- VIEWS
@@ -130,6 +141,7 @@ ALTER TABLE participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE assets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 
 -- For now, allow all operations (we'll validate via participant token in the app)
 -- In production, you'd want more restrictive policies
@@ -139,6 +151,7 @@ CREATE POLICY "Allow all participant operations" ON participants FOR ALL USING (
 CREATE POLICY "Allow all asset operations" ON assets FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all order operations" ON orders FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all trade operations" ON trades FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all message operations" ON messages FOR ALL USING (true) WITH CHECK (true);
 
 -- ============================================
 -- REALTIME
@@ -149,3 +162,4 @@ ALTER PUBLICATION supabase_realtime ADD TABLE orders;
 ALTER PUBLICATION supabase_realtime ADD TABLE trades;
 ALTER PUBLICATION supabase_realtime ADD TABLE assets;
 ALTER PUBLICATION supabase_realtime ADD TABLE participants;
+ALTER PUBLICATION supabase_realtime ADD TABLE messages;

@@ -12,6 +12,7 @@
 	import SettleUpModal from '$lib/components/SettleUpModal.svelte';
 	import AdminPanel from '$lib/components/AdminPanel.svelte';
 	import HelpPanel from '$lib/components/HelpPanel.svelte';
+	import ChatPanel from '$lib/components/ChatPanel.svelte';
 
 	export let data;
 
@@ -128,6 +129,21 @@
 					}
 				}
 			)
+			// Subscribe to chat messages (filtered by market_id)
+			.on(
+				'postgres_changes',
+				{
+					event: 'INSERT',
+					schema: 'public',
+					table: 'messages',
+					filter: `market_id=eq.${data.market.id}`
+				},
+				(payload) => {
+					if (!data.messages.find((m: any) => m.id === payload.new.id)) {
+						data.messages = [...data.messages, payload.new as any];
+					}
+				}
+			)
 			.subscribe((status, err) => {
 				if (status === 'SUBSCRIBED') {
 					connectionStatus = 'connected';
@@ -149,15 +165,17 @@
 		// Re-fetch fresh state from DB to catch anything missed while disconnected
 		try {
 			const assetIds = data.assets.map(a => a.id);
-			const [ordersRes, tradesRes, assetsRes] = await Promise.all([
+			const [ordersRes, tradesRes, assetsRes, messagesRes] = await Promise.all([
 				supabase.from('orders').select('*').in('asset_id', assetIds).eq('status', 'open').order('created_at', { ascending: true }),
 				supabase.from('trades').select('id, asset_id, buyer_id, seller_id, price, size, executed_at').in('asset_id', assetIds).order('executed_at', { ascending: false }).limit(50),
-				supabase.from('assets').select('*').eq('market_id', data.market.id)
+				supabase.from('assets').select('*').eq('market_id', data.market.id),
+				supabase.from('messages').select('*').eq('market_id', data.market.id).order('created_at', { ascending: true }).limit(100)
 			]);
 
 			if (assetsRes.data) data.assets = assetsRes.data as any;
 			if (ordersRes.data) data.orders = ordersRes.data as any;
 			if (tradesRes.data) data.trades = tradesRes.data;
+			if (messagesRes.data) data.messages = messagesRes.data as any;
 		} catch (e) {
 			console.error('Failed to refresh data on reconnect:', e);
 		}
@@ -313,22 +331,33 @@
 	</header>
 
 	<main>
-		<section class="orderbook-section">
-			<h2>Order Book</h2>
-			<OrderBook
-				assets={data.assets}
-				orders={data.orders}
-				marketId={data.market.id}
-				participantId={data.participant.id}
-				isAdmin={data.participant.is_admin}
-				on:assetCreated={handleAssetCreated}
-				on:orderCreated={handleOrderCreated}
-				on:orderUpdated={handleOrderUpdated}
-				on:tradeExecuted={handleTradeExecuted}
-				on:assetUpdated={handleAssetUpdated}
-				on:assetSettled={handleAssetSettled}
-			/>
-		</section>
+		<div class="left-column">
+			<section class="orderbook-section">
+				<h2>Order Book</h2>
+				<OrderBook
+					assets={data.assets}
+					orders={data.orders}
+					marketId={data.market.id}
+					participantId={data.participant.id}
+					isAdmin={data.participant.is_admin}
+					on:assetCreated={handleAssetCreated}
+					on:orderCreated={handleOrderCreated}
+					on:orderUpdated={handleOrderUpdated}
+					on:tradeExecuted={handleTradeExecuted}
+					on:assetUpdated={handleAssetUpdated}
+					on:assetSettled={handleAssetSettled}
+				/>
+			</section>
+
+			<section class="chat-section">
+				<ChatPanel
+					messages={data.messages}
+					participants={data.participants}
+					participantId={data.participant.id}
+					marketId={data.market.id}
+				/>
+			</section>
+		</div>
 
 		<aside class="sidebar">
 			<section class="positions-section">
@@ -510,11 +539,27 @@
 		margin: 0 0 1rem 0;
 	}
 
+	.left-column {
+		display: flex;
+		flex-direction: column;
+		gap: 0.7rem;
+	}
+
 	.orderbook-section {
 		background: #111b2e;
 		border-radius: 0px;
 		border: 1px solid #243254;
 		padding: 1rem;
+	}
+
+	.chat-section {
+		background: #111b2e;
+		border-radius: 0px;
+		border: 1px solid #243254;
+		padding: 1rem;
+		max-height: 250px;
+		display: flex;
+		flex-direction: column;
 	}
 
 	.sidebar {

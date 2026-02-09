@@ -55,6 +55,14 @@ export interface Trade {
 	executed_at: string;
 }
 
+export interface Message {
+	id: string;
+	market_id: string;
+	participant_id: string;
+	content: string;
+	created_at: string;
+}
+
 export interface Position {
 	participant_id: string;
 	asset_id: string;
