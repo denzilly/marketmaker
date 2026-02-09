@@ -6,16 +6,20 @@
 	export let orders: Order[] = [];
 	export let assets: Asset[] = [];
 	export let participantId: string;
+	export let participants: Array<{ id: string; name: string }> = [];
 
 	const dispatch = createEventDispatcher();
 
 	let cancelling: string | null = null;
 	let cancellingAll = false;
 	let cancelError = '';
+	let selectedParticipantId: string = participantId;
 
-	// Filter to only this user's open orders
-	$: myOrders = orders
-		.filter((o) => o.participant_id === participantId && o.status === 'open' && o.remaining_size > 0)
+	$: isOwnOrders = selectedParticipantId === participantId;
+
+	// Filter to selected participant's open orders
+	$: filteredOrders = orders
+		.filter((o) => o.participant_id === selectedParticipantId && o.status === 'open' && o.remaining_size > 0)
 		.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
 	function getAssetName(assetId: string): string {
@@ -26,7 +30,7 @@
 		cancellingAll = true;
 		cancelError = '';
 		try {
-			const ids = myOrders.map((o) => o.id);
+			const ids = filteredOrders.map((o) => o.id);
 			const { error, data: deleted } = await supabase
 				.from('orders')
 				.delete()
@@ -39,7 +43,7 @@
 				cancelError = 'Orders may have already been filled or cancelled.';
 			}
 
-			for (const order of myOrders) {
+			for (const order of filteredOrders) {
 				dispatch('orderCancelled', order);
 			}
 		} catch (e) {
@@ -78,10 +82,19 @@
 </script>
 
 <div class="active-orders">
+	{#if participants.length > 1}
+		<div class="participant-selector">
+			<select bind:value={selectedParticipantId}>
+				{#each participants as p}
+					<option value={p.id}>{p.id === participantId ? `${p.name} (You)` : p.name}</option>
+				{/each}
+			</select>
+		</div>
+	{/if}
 	{#if cancelError}
 		<div class="cancel-error">{cancelError}</div>
 	{/if}
-	{#if myOrders.length === 0}
+	{#if filteredOrders.length === 0}
 		<p class="empty">No active orders.</p>
 	{:else}
 		<table>
@@ -91,19 +104,23 @@
 					<th>Side</th>
 					<th>Size</th>
 					<th>Price</th>
-					<th>
-						<button
-							class="cancel-all-btn"
-							on:click={cancelAllOrders}
-							disabled={cancellingAll}
-						>
-							{cancellingAll ? '...' : 'Cancel All'}
-						</button>
-					</th>
+					{#if isOwnOrders}
+						<th>
+							<button
+								class="cancel-all-btn"
+								on:click={cancelAllOrders}
+								disabled={cancellingAll}
+							>
+								{cancellingAll ? '...' : 'Cancel All'}
+							</button>
+						</th>
+					{:else}
+						<th></th>
+					{/if}
 				</tr>
 			</thead>
 			<tbody>
-				{#each myOrders as order}
+				{#each filteredOrders as order}
 					<tr>
 						<td class="asset-name">{getAssetName(order.asset_id)}</td>
 						<td class:bid={order.side === 'buy'} class:ask={order.side === 'sell'}>
@@ -112,13 +129,15 @@
 						<td>{order.remaining_size}</td>
 						<td class="price">{order.price}</td>
 						<td class="cancel-col">
-							<button
-								class="cancel-btn"
-								on:click={() => cancelOrder(order)}
-								disabled={cancelling === order.id}
-							>
-								{cancelling === order.id ? '...' : '✕'}
-							</button>
+							{#if isOwnOrders}
+								<button
+									class="cancel-btn"
+									on:click={() => cancelOrder(order)}
+									disabled={cancelling === order.id}
+								>
+									{cancelling === order.id ? '...' : '✕'}
+								</button>
+							{/if}
 						</td>
 					</tr>
 				{/each}
@@ -130,6 +149,25 @@
 <style>
 	.active-orders {
 		width: 100%;
+	}
+
+	.participant-selector {
+		margin-bottom: 0.5rem;
+		text-align: right;
+	}
+
+	.participant-selector select {
+		background: #0a1020;
+		border: 1px solid #243254;
+		color: #8498b5;
+		padding: 0.25rem 0.5rem;
+		font-size: 0.75rem;
+		font-family: inherit;
+	}
+
+	.participant-selector select:focus {
+		outline: none;
+		border-color: #7ec8ff;
 	}
 
 	.empty {

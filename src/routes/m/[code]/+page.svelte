@@ -332,20 +332,22 @@
 
 		<aside class="sidebar">
 			<section class="positions-section">
-				<h2>My Positions</h2>
+				<h2>Positions</h2>
 				<PositionBlotter
 					trades={data.trades}
 					assets={data.assets}
 					participantId={data.participant.id}
+					participants={data.participants}
 				/>
 			</section>
 
 			<section class="orders-section">
-				<h2>My Orders</h2>
+				<h2>Orders</h2>
 				<ActiveOrders
 					orders={data.orders}
 					assets={data.assets}
 					participantId={data.participant.id}
+					participants={data.participants}
 					on:orderCancelled={handleOrderCancelled}
 				/>
 			</section>

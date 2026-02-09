@@ -4,6 +4,9 @@
 	export let trades: Array<{ id: string; asset_id: string; buyer_id: string; seller_id: string; price: number; size: number; executed_at: string }> = [];
 	export let assets: Asset[] = [];
 	export let participantId: string;
+	export let participants: Array<{ id: string; name: string }> = [];
+
+	let selectedParticipantId: string = participantId;
 
 	interface ComputedPosition {
 		asset: Asset;
@@ -22,11 +25,11 @@
 			let cash_flow = 0;
 
 			for (const t of assetTrades) {
-				if (t.buyer_id === participantId) {
+				if (t.buyer_id === selectedParticipantId) {
 					net_position += t.size;
 					cash_flow -= t.price * t.size;
 				}
-				if (t.seller_id === participantId) {
+				if (t.seller_id === selectedParticipantId) {
 					net_position -= t.size;
 					cash_flow += t.price * t.size;
 				}
@@ -46,6 +49,15 @@
 </script>
 
 <div class="position-blotter">
+	{#if participants.length > 1}
+		<div class="participant-selector">
+			<select bind:value={selectedParticipantId}>
+				{#each participants as p}
+					<option value={p.id}>{p.id === participantId ? `${p.name} (You)` : p.name}</option>
+				{/each}
+			</select>
+		</div>
+	{/if}
 	{#if positions.length === 0}
 		<p class="empty">No positions yet.</p>
 	{:else}
@@ -91,6 +103,25 @@
 <style>
 	.position-blotter {
 		width: 100%;
+	}
+
+	.participant-selector {
+		margin-bottom: 0.5rem;
+		text-align: right;
+	}
+
+	.participant-selector select {
+		background: #0a1020;
+		border: 1px solid #243254;
+		color: #8498b5;
+		padding: 0.25rem 0.5rem;
+		font-size: 0.75rem;
+		font-family: inherit;
+	}
+
+	.participant-selector select:focus {
+		outline: none;
+		border-color: #7ec8ff;
 	}
 
 	.empty {
