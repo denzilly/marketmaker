@@ -49,15 +49,16 @@
 </script>
 
 <div class="position-blotter">
-	{#if participants.length > 1}
-		<div class="participant-selector">
+	<div class="section-header">
+		<h2>Positions</h2>
+		{#if participants.length > 1}
 			<select bind:value={selectedParticipantId}>
 				{#each participants as p}
 					<option value={p.id}>{p.id === participantId ? `${p.name} (You)` : p.name}</option>
 				{/each}
 			</select>
-		</div>
-	{/if}
+		{/if}
+	</div>
 	{#if positions.length === 0}
 		<p class="empty">No positions yet.</p>
 	{:else}
@@ -105,12 +106,22 @@
 		width: 100%;
 	}
 
-	.participant-selector {
-		margin-bottom: 0.5rem;
-		text-align: right;
+	.section-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 0.75rem;
 	}
 
-	.participant-selector select {
+	.section-header h2 {
+		font-size: 0.875rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: #607a9c;
+		margin: 0;
+	}
+
+	.section-header select {
 		background: #0a1020;
 		border: 1px solid #243254;
 		color: #8498b5;
@@ -119,7 +130,7 @@
 		font-family: inherit;
 	}
 
-	.participant-selector select:focus {
+	.section-header select:focus {
 		outline: none;
 		border-color: #7ec8ff;
 	}

@@ -14,16 +14,22 @@
 	let cancellingAll = false;
 	let cancelError = '';
 	let selectedParticipantId: string = participantId;
+	const ALL_FILTER = '__all__';
 
 	$: isOwnOrders = selectedParticipantId === participantId;
+	$: isAllOrders = selectedParticipantId === ALL_FILTER;
 
-	// Filter to selected participant's open orders
+	// Filter to selected participant's open orders (or all)
 	$: filteredOrders = orders
-		.filter((o) => o.participant_id === selectedParticipantId && o.status === 'open' && o.remaining_size > 0)
+		.filter((o) => (isAllOrders || o.participant_id === selectedParticipantId) && o.status === 'open' && o.remaining_size > 0)
 		.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
 	function getAssetName(assetId: string): string {
 		return assets.find((a) => a.id === assetId)?.name ?? 'Unknown';
+	}
+
+	function getParticipantName(pid: string): string {
+		return participants.find((p) => p.id === pid)?.name ?? 'Unknown';
 	}
 
 	async function cancelAllOrders() {
@@ -82,15 +88,17 @@
 </script>
 
 <div class="active-orders">
-	{#if participants.length > 1}
-		<div class="participant-selector">
+	<div class="section-header">
+		<h2>Orders</h2>
+		{#if participants.length > 1}
 			<select bind:value={selectedParticipantId}>
 				{#each participants as p}
 					<option value={p.id}>{p.id === participantId ? `${p.name} (You)` : p.name}</option>
 				{/each}
+				<option value={ALL_FILTER}>All</option>
 			</select>
-		</div>
-	{/if}
+		{/if}
+	</div>
 	{#if cancelError}
 		<div class="cancel-error">{cancelError}</div>
 	{/if}
@@ -101,6 +109,7 @@
 			<thead>
 				<tr>
 					<th>Asset</th>
+					{#if isAllOrders}<th>Player</th>{/if}
 					<th>Side</th>
 					<th>Size</th>
 					<th>Price</th>
@@ -123,6 +132,7 @@
 				{#each filteredOrders as order}
 					<tr>
 						<td class="asset-name">{getAssetName(order.asset_id)}</td>
+						{#if isAllOrders}<td class="player-name">{getParticipantName(order.participant_id)}</td>{/if}
 						<td class:bid={order.side === 'buy'} class:ask={order.side === 'sell'}>
 							{order.side === 'buy' ? 'BID' : 'OFFER'}
 						</td>
@@ -151,12 +161,22 @@
 		width: 100%;
 	}
 
-	.participant-selector {
-		margin-bottom: 0.5rem;
-		text-align: right;
+	.section-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 0.75rem;
 	}
 
-	.participant-selector select {
+	.section-header h2 {
+		font-size: 0.875rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: #607a9c;
+		margin: 0;
+	}
+
+	.section-header select {
 		background: #0a1020;
 		border: 1px solid #243254;
 		color: #8498b5;
@@ -165,7 +185,7 @@
 		font-family: inherit;
 	}
 
-	.participant-selector select:focus {
+	.section-header select:focus {
 		outline: none;
 		border-color: #7ec8ff;
 	}
@@ -220,6 +240,10 @@
 	.asset-name {
 		color: #fff;
 		font-weight: 500;
+	}
+
+	.player-name {
+		color: #8498b5;
 	}
 
 	.bid {

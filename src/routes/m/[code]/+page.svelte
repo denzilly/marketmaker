@@ -332,7 +332,6 @@
 
 		<aside class="sidebar">
 			<section class="positions-section">
-				<h2>Positions</h2>
 				<PositionBlotter
 					trades={data.trades}
 					assets={data.assets}
@@ -342,7 +341,6 @@
 			</section>
 
 			<section class="orders-section">
-				<h2>Orders</h2>
 				<ActiveOrders
 					orders={data.orders}
 					assets={data.assets}
