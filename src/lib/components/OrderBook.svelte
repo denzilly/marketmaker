@@ -189,7 +189,7 @@
 
 			dispatch('orderCreated', newOrder);
 
-			const result = await matchOrder(newOrder as Order, orders);
+			const result = await matchOrder(newOrder.id);
 
 			for (const trade of result.trades) {
 				dispatch('tradeExecuted', trade);
@@ -280,7 +280,7 @@
 			for (const order of newOrders ?? []) {
 				dispatch('orderCreated', order);
 
-				const result = await matchOrder(order as Order, orders);
+				const result = await matchOrder(order.id);
 
 				for (const trade of result.trades) {
 					dispatch('tradeExecuted', trade);

@@ -41,6 +41,7 @@
 				.from('orders')
 				.update({ status: 'cancelled', remaining_size: 0 })
 				.in('id', ids)
+				.eq('status', 'open')
 				.select('id');
 
 			if (error) throw error;
@@ -68,6 +69,7 @@
 				.from('orders')
 				.update({ status: 'cancelled', remaining_size: 0 })
 				.eq('id', order.id)
+				.eq('status', 'open')
 				.select('id');
 
 			if (error) throw error;
