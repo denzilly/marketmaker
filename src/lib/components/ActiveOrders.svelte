@@ -37,15 +37,15 @@
 		cancelError = '';
 		try {
 			const ids = filteredOrders.map((o) => o.id);
-			const { error, data: deleted } = await supabase
+			const { error, data: updated } = await supabase
 				.from('orders')
-				.delete()
+				.update({ status: 'cancelled', remaining_size: 0 })
 				.in('id', ids)
 				.select('id');
 
 			if (error) throw error;
 
-			if (!deleted || deleted.length === 0) {
+			if (!updated || updated.length === 0) {
 				cancelError = 'Orders may have already been filled or cancelled.';
 			}
 
@@ -64,15 +64,15 @@
 		cancelling = order.id;
 		cancelError = '';
 		try {
-			const { error, data: deleted } = await supabase
+			const { error, data: updated } = await supabase
 				.from('orders')
-				.delete()
+				.update({ status: 'cancelled', remaining_size: 0 })
 				.eq('id', order.id)
 				.select('id');
 
 			if (error) throw error;
 
-			if (!deleted || deleted.length === 0) {
+			if (!updated || updated.length === 0) {
 				cancelError = 'Order may have already been filled or cancelled.';
 			}
 

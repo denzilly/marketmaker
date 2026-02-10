@@ -122,14 +122,14 @@
 
 			if (assetError) throw assetError;
 
-			const { error: deleteError } = await supabase
+			const { error: cancelError } = await supabase
 				.from('orders')
-				.delete()
+				.update({ status: 'cancelled', remaining_size: 0 })
 				.eq('asset_id', settlingAssetId)
 				.eq('status', 'open');
 
-			if (deleteError) {
-				console.error('Failed to delete orders after settlement:', deleteError);
+			if (cancelError) {
+				console.error('Failed to cancel orders after settlement:', cancelError);
 			}
 
 			dispatch('assetSettled', updatedAsset);
