@@ -80,6 +80,31 @@
 		createError = '';
 	}
 
+	let deletingAssetId: string | null = null;
+	let deleteError = '';
+
+	async function deleteAsset(assetId: string) {
+		if (!confirm('Delete this asset? All orders and trades for this asset will be permanently removed.')) return;
+
+		deletingAssetId = assetId;
+		deleteError = '';
+
+		try {
+			const { error } = await supabase
+				.from('assets')
+				.delete()
+				.eq('id', assetId);
+
+			if (error) throw error;
+
+			dispatch('assetDeleted', { id: assetId });
+		} catch (e) {
+			deleteError = e instanceof Error ? e.message : 'Failed to delete asset';
+		} finally {
+			deletingAssetId = null;
+		}
+	}
+
 	function openSettlement(assetId: string) {
 		orderEntryAssetId = null;
 		settlingAssetId = assetId;
@@ -382,6 +407,9 @@
 </script>
 
 <div class="orderbook">
+	{#if deleteError}
+		<div class="error">{deleteError}</div>
+	{/if}
 	{#if showCreateForm}
 		<div class="create-form">
 			<h3>Create New Asset</h3>
@@ -451,7 +479,16 @@
 							<td colspan="4" class="settled-info">
 								<span class="settled-value">{asset.settlement_value}</span>
 							</td>
-							<td class="actions-col"></td>
+							<td class="actions-col">
+								{#if isAdmin}
+									<button
+										class="delete-asset-btn"
+										on:click={() => deleteAsset(asset.id)}
+										disabled={deletingAssetId === asset.id}
+										title="Delete this asset"
+									>{deletingAssetId === asset.id ? '...' : '🗑'}</button>
+								{/if}
+							</td>
 						{:else}
 							<td class="size-col">{topBidSize || '-'}</td>
 							<td class="bid-col">
@@ -494,6 +531,12 @@
 										on:click={() => openSettlement(asset.id)}
 										title="Settle this asset"
 									>S</button>
+									<button
+										class="delete-asset-btn"
+										on:click={() => deleteAsset(asset.id)}
+										disabled={deletingAssetId === asset.id}
+										title="Delete this asset"
+									>{deletingAssetId === asset.id ? '...' : '🗑'}</button>
 								{/if}
 								<button
 									class="add-order-btn"
@@ -973,6 +1016,25 @@
 		background: rgba(251, 191, 36, 0.15);
 	}
 
+	.delete-asset-btn {
+		padding: 0.25rem 0.5rem;
+		background: transparent;
+		border: 1px solid #ef4444;
+		border-radius: 4px;
+		color: #ef4444;
+		font-size: 0.75rem;
+		margin-left: 0.125rem;
+	}
+
+	.delete-asset-btn:hover:not(:disabled) {
+		background: rgba(239, 68, 68, 0.15);
+	}
+
+	.delete-asset-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
 	/* Depth rows */
 	.depth-row td {
 		padding: 0.25rem 0.5rem;
@@ -1258,7 +1320,8 @@
 
 		.add-order-btn,
 		.depth-btn,
-		.settle-btn {
+		.settle-btn,
+		.delete-asset-btn {
 			padding: 0.2rem 0.375rem;
 			font-size: 0.6875rem;
 		}

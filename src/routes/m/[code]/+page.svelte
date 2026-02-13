@@ -266,6 +266,13 @@
 		data.orders = data.orders.map((o) => (o.id === amended.id ? amended : o));
 	}
 
+	function handleAssetDeleted(event: CustomEvent) {
+		const { id } = event.detail;
+		data.assets = data.assets.filter((a) => a.id !== id);
+		data.orders = data.orders.filter((o) => o.asset_id !== id);
+		data.trades = data.trades.filter((t) => t.asset_id !== id);
+	}
+
 	function handleAssetSettled(event: CustomEvent) {
 		const settledAsset = event.detail;
 		data.assets = data.assets.map((a) =>
@@ -351,6 +358,7 @@
 					on:tradeExecuted={handleTradeExecuted}
 					on:assetUpdated={handleAssetUpdated}
 					on:assetSettled={handleAssetSettled}
+					on:assetDeleted={handleAssetDeleted}
 				/>
 			</section>
 
