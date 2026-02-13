@@ -125,6 +125,7 @@
 	.time {
 		color: #435a80;
 		font-size: 0.75rem;
+		white-space: nowrap;
 	}
 
 	@media (max-width: 600px) {

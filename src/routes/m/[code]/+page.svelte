@@ -543,7 +543,7 @@
 	main {
 		flex: 1;
 		display: grid;
-		grid-template-columns: 1fr 350px;
+		grid-template-columns: 1fr 400px;
 		gap: 0.7rem;
 		padding: 0.7rem;
 	}
