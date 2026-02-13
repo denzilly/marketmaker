@@ -42,6 +42,7 @@
 
 	async function createAsset() {
 		if (!newAssetName.trim()) return;
+		if (newAssetName.trim().length > 32) { createError = 'Asset name must be 32 characters or fewer'; return; }
 
 		creating = true;
 		createError = '';
@@ -393,7 +394,7 @@
 					type="text"
 					bind:value={newAssetName}
 					placeholder="e.g. Fred's quiz score"
-					maxlength="50"
+					maxlength="32"
 					disabled={creating}
 				/>
 			</label>
