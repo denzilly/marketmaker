@@ -48,6 +48,24 @@
 			</section>
 
 			<section>
+				<h3>Amending Orders</h3>
+				<p>
+					You can amend the <strong>price</strong> and/or
+					<strong>remaining size</strong> of any open order. Click the
+					pencil icon (<strong>✎</strong>) next to an order in the
+					Orders panel, edit the values inline, and press
+					<strong>OK</strong> or <strong>Enter</strong> to confirm.
+					Press <strong>Escape</strong> or <strong>✕</strong> to
+					cancel the edit.
+				</p>
+				<p>
+					Changing the price resets your queue priority (the order
+					moves to the back of the line at that price level). Changing
+					only the size keeps your original priority.
+				</p>
+			</section>
+
+			<section>
 				<h3>Trading</h3>
 				<p>
 					You can also trade instantly by clicking a price button in

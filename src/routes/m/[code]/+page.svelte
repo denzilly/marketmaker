@@ -261,6 +261,11 @@
 		data.orders = data.orders.filter((o) => o.id !== event.detail.id);
 	}
 
+	function handleOrderAmended(event: CustomEvent) {
+		const amended = event.detail;
+		data.orders = data.orders.map((o) => (o.id === amended.id ? amended : o));
+	}
+
 	function handleAssetSettled(event: CustomEvent) {
 		const settledAsset = event.detail;
 		data.assets = data.assets.map((a) =>
@@ -376,6 +381,10 @@
 					participantId={data.participant.id}
 					participants={data.participants}
 					on:orderCancelled={handleOrderCancelled}
+					on:orderAmended={handleOrderAmended}
+					on:orderUpdated={handleOrderUpdated}
+					on:tradeExecuted={handleTradeExecuted}
+					on:assetUpdated={handleAssetUpdated}
 				/>
 			</section>
 

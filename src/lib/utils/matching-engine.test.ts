@@ -429,4 +429,156 @@ describe('computeMatches', () => {
 		expect(matches).toHaveLength(1);
 		expect(matches[0].tradePrice).toBe(50);
 	});
+
+	// --- Amendment scenarios ---
+	// These test that after an order is amended (price/size/timestamp changed),
+	// matching behaves correctly.
+
+	test('amended order with new crossing price matches existing orders', () => {
+		// Simulates: sell order was at 55 (no cross), amended down to 48 (crosses the bid)
+		const amended = makeOrder({
+			side: 'sell',
+			price: 48, // amended from 55 to 48
+			size: 2,
+			remaining_size: 2,
+			participant_id: 'seller'
+		});
+		const existing = [
+			makeOrder({ side: 'buy', price: 50, participant_id: 'buyer' })
+		];
+
+		const matches = computeMatches(amended, existing);
+		expect(matches).toHaveLength(1);
+		expect(matches[0].tradePrice).toBe(50); // executes at resting bid
+		expect(matches[0].fillSize).toBe(1);
+	});
+
+	test('amended order with non-crossing price still does not match', () => {
+		// Simulates: buy order amended from 45 to 48, but best offer is at 50
+		const amended = makeOrder({
+			side: 'buy',
+			price: 48,
+			participant_id: 'buyer'
+		});
+		const existing = [
+			makeOrder({ side: 'sell', price: 50, participant_id: 'seller' })
+		];
+
+		const matches = computeMatches(amended, existing);
+		expect(matches).toHaveLength(0);
+	});
+
+	test('amended order with increased size fills more contracts', () => {
+		// Simulates: buy order size amended from 1 to 5, matching against multiple sells
+		const amended = makeOrder({
+			side: 'buy',
+			price: 55,
+			size: 5,
+			remaining_size: 5, // increased from original
+			participant_id: 'buyer'
+		});
+		const existing = [
+			makeOrder({ side: 'sell', price: 50, size: 2, remaining_size: 2, participant_id: 'seller-1' }),
+			makeOrder({ side: 'sell', price: 52, size: 3, remaining_size: 3, participant_id: 'seller-2' })
+		];
+
+		const matches = computeMatches(amended, existing);
+		expect(matches).toHaveLength(2);
+		expect(matches[0].fillSize).toBe(2);
+		expect(matches[1].fillSize).toBe(3);
+	});
+
+	test('amended order with decreased size fills fewer contracts', () => {
+		// Simulates: buy order remaining_size amended from 5 to 1
+		const amended = makeOrder({
+			side: 'buy',
+			price: 55,
+			size: 5,
+			remaining_size: 1, // decreased
+			participant_id: 'buyer'
+		});
+		const existing = [
+			makeOrder({ side: 'sell', price: 50, size: 3, remaining_size: 3, participant_id: 'seller-1' }),
+			makeOrder({ side: 'sell', price: 52, size: 3, remaining_size: 3, participant_id: 'seller-2' })
+		];
+
+		const matches = computeMatches(amended, existing);
+		expect(matches).toHaveLength(1);
+		expect(matches[0].fillSize).toBe(1);
+	});
+
+	test('amended order with reset timestamp loses priority at same price', () => {
+		// Simulates: order at price 50 was amended (price changed), so created_at is reset to now.
+		// Another order at the same price with an older timestamp should have priority.
+		const earlyTime = new Date(2024, 0, 1, 10, 0, 0).toISOString();
+		const amendedTime = new Date(2024, 0, 1, 12, 0, 0).toISOString(); // later = lost priority
+
+		const incoming = makeOrder({
+			side: 'buy',
+			price: 50,
+			size: 1,
+			remaining_size: 1,
+			participant_id: 'buyer'
+		});
+
+		const existing = [
+			makeOrder({
+				id: 'amended-sell',
+				side: 'sell',
+				price: 50,
+				participant_id: 'seller-1',
+				created_at: amendedTime // reset after amendment
+			}),
+			makeOrder({
+				id: 'original-sell',
+				side: 'sell',
+				price: 50,
+				participant_id: 'seller-2',
+				created_at: earlyTime // original, earlier
+			})
+		];
+
+		const matches = computeMatches(incoming, existing);
+		expect(matches).toHaveLength(1);
+		// The original (earlier) order should match first
+		expect(matches[0].restingOrderId).toBe('original-sell');
+	});
+
+	test('amended order keeps priority when only size changed (timestamp unchanged)', () => {
+		// Size-only change preserves created_at, so order keeps its queue position
+		const earlyTime = new Date(2024, 0, 1, 10, 0, 0).toISOString();
+		const lateTime = new Date(2024, 0, 1, 12, 0, 0).toISOString();
+
+		const incoming = makeOrder({
+			side: 'buy',
+			price: 50,
+			size: 1,
+			remaining_size: 1,
+			participant_id: 'buyer'
+		});
+
+		const existing = [
+			makeOrder({
+				id: 'size-amended-sell',
+				side: 'sell',
+				price: 50,
+				size: 5,
+				remaining_size: 3, // size amended but timestamp preserved
+				participant_id: 'seller-1',
+				created_at: earlyTime
+			}),
+			makeOrder({
+				id: 'newer-sell',
+				side: 'sell',
+				price: 50,
+				participant_id: 'seller-2',
+				created_at: lateTime
+			})
+		];
+
+		const matches = computeMatches(incoming, existing);
+		expect(matches).toHaveLength(1);
+		// Size-amended order keeps its earlier timestamp, so it matches first
+		expect(matches[0].restingOrderId).toBe('size-amended-sell');
+	});
 });

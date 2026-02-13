@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
 	import { supabase } from '$lib/supabase';
+	import { matchOrder } from '$lib/utils/order-matching';
 	import type { Asset, Order } from '$lib/types/database';
 
 	export let orders: Order[] = [];
@@ -16,6 +17,12 @@
 	let selectedParticipantId: string = participantId;
 	const ALL_FILTER = '__all__';
 
+	let editingOrderId: string | null = null;
+	let editPrice = '';
+	let editSize = '';
+	let amending = false;
+	let amendError = '';
+
 	$: isOwnOrders = selectedParticipantId === participantId;
 	$: isAllOrders = selectedParticipantId === ALL_FILTER;
 
@@ -24,12 +31,110 @@
 		.filter((o) => (isAllOrders || o.participant_id === selectedParticipantId) && o.status === 'open' && o.remaining_size > 0)
 		.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+	// Auto-close edit if the order being edited gets filled/cancelled via real-time
+	$: if (editingOrderId) {
+		const editedOrder = orders.find((o) => o.id === editingOrderId);
+		if (!editedOrder || editedOrder.status !== 'open' || editedOrder.remaining_size <= 0) {
+			editingOrderId = null;
+			editPrice = '';
+			editSize = '';
+			amendError = '';
+		}
+	}
+
 	function getAssetName(assetId: string): string {
 		return assets.find((a) => a.id === assetId)?.name ?? 'Unknown';
 	}
 
 	function getParticipantName(pid: string): string {
 		return participants.find((p) => p.id === pid)?.name ?? 'Unknown';
+	}
+
+	function startAmend(order: Order) {
+		editingOrderId = order.id;
+		editPrice = String(order.price);
+		editSize = String(order.remaining_size);
+		amendError = '';
+	}
+
+	function cancelAmend() {
+		editingOrderId = null;
+		editPrice = '';
+		editSize = '';
+		amendError = '';
+	}
+
+	async function submitAmend(order: Order) {
+		const newPrice = parseFloat(editPrice);
+		const newSize = parseInt(editSize, 10);
+
+		if (isNaN(newPrice) || newPrice <= 0) { amendError = 'Price must be a positive number'; return; }
+		if (isNaN(newSize) || newSize <= 0) { amendError = 'Size must be a positive integer'; return; }
+
+		// No change — just close
+		if (newPrice === order.price && newSize === order.remaining_size) {
+			cancelAmend();
+			return;
+		}
+
+		amending = true;
+		amendError = '';
+
+		try {
+			const updatePayload: Record<string, any> = {
+				price: newPrice,
+				remaining_size: newSize
+			};
+
+			// Price change resets queue priority
+			if (newPrice !== order.price) {
+				updatePayload.created_at = new Date().toISOString();
+			}
+
+			// If new remaining exceeds original size, bump size to keep size >= remaining
+			const alreadyFilled = order.size - order.remaining_size;
+			if (newSize + alreadyFilled > order.size) {
+				updatePayload.size = newSize + alreadyFilled;
+			}
+
+			const { error, data: updated } = await supabase
+				.from('orders')
+				.update(updatePayload)
+				.eq('id', order.id)
+				.eq('status', 'open')
+				.select()
+				.single();
+
+			if (error) throw error;
+
+			if (!updated) {
+				amendError = 'Order may have already been filled or cancelled.';
+				return;
+			}
+
+			dispatch('orderAmended', updated);
+
+			// Re-match to check for crosses at the new price
+			const result = await matchOrder(order.id);
+
+			for (const trade of result.trades) {
+				dispatch('tradeExecuted', trade);
+			}
+			for (const updatedOrder of result.updatedOrders) {
+				dispatch('orderUpdated', updatedOrder);
+			}
+			if (result.trades.length > 0) {
+				const lastPrice = result.trades[result.trades.length - 1].price;
+				dispatch('assetUpdated', { id: order.asset_id, last_price: lastPrice });
+			}
+
+			cancelAmend();
+		} catch (e) {
+			console.error('Failed to amend order:', e);
+			amendError = 'Failed to amend order. It may have been filled or cancelled.';
+		} finally {
+			amending = false;
+		}
 	}
 
 	async function cancelAllOrders() {
@@ -104,6 +209,9 @@
 	{#if cancelError}
 		<div class="cancel-error">{cancelError}</div>
 	{/if}
+	{#if amendError}
+		<div class="cancel-error">{amendError}</div>
+	{/if}
 	{#if filteredOrders.length === 0}
 		<p class="empty">No active orders.</p>
 	{:else}
@@ -120,7 +228,7 @@
 							<button
 								class="cancel-all-btn"
 								on:click={cancelAllOrders}
-								disabled={cancellingAll}
+								disabled={cancellingAll || editingOrderId !== null}
 							>
 								{cancellingAll ? '...' : 'Cancel All'}
 							</button>
@@ -132,25 +240,73 @@
 			</thead>
 			<tbody>
 				{#each filteredOrders as order}
-					<tr>
+					<tr class:editing={editingOrderId === order.id}>
 						<td class="asset-name">{getAssetName(order.asset_id)}</td>
 						{#if isAllOrders}<td class="player-name">{getParticipantName(order.participant_id)}</td>{/if}
 						<td class:bid={order.side === 'buy'} class:ask={order.side === 'sell'}>
 							{order.side === 'buy' ? 'BID' : 'OFFER'}
 						</td>
-						<td>{order.remaining_size}</td>
-						<td class="price">{order.price}</td>
-						<td class="cancel-col">
-							{#if isOwnOrders}
+
+						{#if editingOrderId === order.id}
+							<td>
+								<input
+									type="number"
+									class="edit-input"
+									bind:value={editSize}
+									min="1"
+									step="1"
+									disabled={amending}
+								/>
+							</td>
+							<td>
+								<input
+									type="number"
+									class="edit-input"
+									bind:value={editPrice}
+									step="0.1"
+									disabled={amending}
+									on:keydown={(e) => { if (e.key === 'Enter') submitAmend(order); if (e.key === 'Escape') cancelAmend(); }}
+								/>
+							</td>
+							<td class="action-col">
 								<button
-									class="cancel-btn"
-									on:click={() => cancelOrder(order)}
-									disabled={cancelling === order.id}
+									class="save-btn"
+									on:click={() => submitAmend(order)}
+									disabled={amending}
 								>
-									{cancelling === order.id ? '...' : '✕'}
+									{amending ? '...' : 'OK'}
 								</button>
-							{/if}
-						</td>
+								<button
+									class="cancel-edit-btn"
+									on:click={cancelAmend}
+									disabled={amending}
+								>
+									✕
+								</button>
+							</td>
+						{:else}
+							<td>{order.remaining_size}</td>
+							<td class="price">{order.price}</td>
+							<td class="action-col">
+								{#if isOwnOrders}
+									<button
+										class="amend-btn"
+										on:click={() => startAmend(order)}
+										disabled={cancelling === order.id || editingOrderId !== null}
+										title="Amend order"
+									>
+										✎
+									</button>
+									<button
+										class="cancel-btn"
+										on:click={() => cancelOrder(order)}
+										disabled={cancelling === order.id || editingOrderId !== null}
+									>
+										{cancelling === order.id ? '...' : '✕'}
+									</button>
+								{/if}
+							</td>
+						{/if}
 					</tr>
 				{/each}
 			</tbody>
@@ -281,8 +437,9 @@
 		cursor: not-allowed;
 	}
 
-	.cancel-col {
+	.action-col {
 		text-align: right;
+		white-space: nowrap;
 	}
 
 	.cancel-btn {
@@ -305,9 +462,111 @@
 		cursor: not-allowed;
 	}
 
+	.amend-btn {
+		padding: 0.125rem 0.375rem;
+		background: transparent;
+		border: 1px solid #2e3e66;
+		border-radius: 4px;
+		color: #607a9c;
+		font-size: 0.75rem;
+		line-height: 1;
+		margin-right: 0.25rem;
+	}
+
+	.amend-btn:hover:not(:disabled) {
+		border-color: #7ec8ff;
+		color: #7ec8ff;
+	}
+
+	.amend-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.edit-input {
+		width: 60px;
+		padding: 0.25rem 0.375rem;
+		border: 1px solid #7ec8ff;
+		border-radius: 4px;
+		background: #0a1020;
+		color: #fff;
+		font-size: 0.8125rem;
+		font-family: inherit;
+		text-align: center;
+		-moz-appearance: textfield;
+		appearance: textfield;
+	}
+
+	.edit-input::-webkit-inner-spin-button,
+	.edit-input::-webkit-outer-spin-button {
+		-webkit-appearance: none;
+		appearance: none;
+		margin: 0;
+	}
+
+	.edit-input:focus {
+		outline: none;
+		border-color: #7ec8ff;
+		box-shadow: 0 0 0 1px rgba(126, 200, 255, 0.3);
+	}
+
+	.edit-input:disabled {
+		opacity: 0.5;
+	}
+
+	.save-btn {
+		padding: 0.125rem 0.375rem;
+		background: #2563eb;
+		border: none;
+		border-radius: 4px;
+		color: #fff;
+		font-size: 0.75rem;
+		line-height: 1;
+		margin-right: 0.25rem;
+	}
+
+	.save-btn:hover:not(:disabled) {
+		background: #1d4ed8;
+	}
+
+	.save-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.cancel-edit-btn {
+		padding: 0.125rem 0.375rem;
+		background: transparent;
+		border: 1px solid #2e3e66;
+		border-radius: 4px;
+		color: #607a9c;
+		font-size: 0.75rem;
+		line-height: 1;
+	}
+
+	.cancel-edit-btn:hover:not(:disabled) {
+		border-color: #ef4444;
+		color: #ef4444;
+	}
+
+	.cancel-edit-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	tr.editing td {
+		background: rgba(126, 200, 255, 0.05);
+	}
+
 	@media (max-width: 600px) {
 		th, td {
 			padding: 0.25rem 0.375rem;
+			font-size: 0.75rem;
+		}
+
+		.edit-input {
+			width: 48px;
+			padding: 0.2rem 0.25rem;
 			font-size: 0.75rem;
 		}
 	}
