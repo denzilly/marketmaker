@@ -62,7 +62,8 @@ There should be a small blotter that shows the user's current position in any of
 - **assets**: id, market_id, name, description, status, settlement_value, last_price
 - **orders**: id, asset_id, participant_id, side, price, size, remaining_size, status
 - **trades**: id, asset_id, buy_order_id, sell_order_id, buyer_id, seller_id, price, size
-- **positions** (view): computed from trades - shows net_position and cash_flow per participant per asset
+- **positions** (view): computed from ALL trades - shows net_position and cash_flow per participant per asset. Includes both open positions (net_position != 0) and closed positions with realized P&L (cash_flow != 0)
+- **messages**: id, market_id, participant_id, content, created_at
 
 ### Real-time Updates
 Using Supabase real-time subscriptions for live updates on:
@@ -103,14 +104,18 @@ Using Supabase real-time subscriptions for live updates on:
 - Individual cancel buttons + "Cancel All" bulk action
 
 ### Position Blotter (`PositionBlotter.svelte`)
-- Net position and P&L per asset, computed from trades
+- Net position and P&L per asset, fetched from database `positions` view
+- Database-driven calculation ensures 100% accuracy across complete trade history
+- Automatically refreshes after each trade execution
 - Mark-to-market against last_price (unrealized) or settlement_value (realized)
+- Shows both open positions and closed positions with realized P&L
 - Color coded: green for long, red for short
 
 ### Trade Blotter (`TradeBlotter.svelte`)
-- Reverse-chronological feed of all market trades
+- Reverse-chronological feed of recent market trades (displays 50 most recent)
 - Format: "Buyer bought Size @ Price from Seller"
 - Color coded buyer (green) and seller (red)
+- Note: While the blotter displays limited history, position calculations use complete trade history from database
 
 ### Settle Up Modal (`SettleUpModal.svelte`)
 - Computes realized P&L per participant across settled assets
@@ -140,4 +145,5 @@ Using Supabase real-time subscriptions for live updates on:
 ## Known Issues / UI Improvements
 ### Order Book
 - The depth toggle arrow button should remain visible when the depth view is open, even if all orders at deeper levels are cancelled (currently the button disappears if there are no additional orders behind top of book)
-
+- negative numbers not allowed in prices, this should be possible as sometimes for more complex derivatives prices can be negative
+- improve the recent trades overview to show things with a cleaner line by line layout

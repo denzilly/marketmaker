@@ -31,7 +31,7 @@ MarketMaker lets users create "markets" (sessions) where participants can define
 - [x] Order matching with price-time priority (FIFO), partial fills
 - [x] Order cancellation (individual + bulk "Cancel All")
 - [x] Real-time subscriptions (orders, trades, assets, participants)
-- [x] Position blotter with unrealized P&L (mark-to-market)
+- [x] Position blotter with unrealized P&L (mark-to-market, database-driven)
 - [x] Trade blotter with full market history
 - [x] Active orders panel
 - [x] Order book depth view (expandable per asset)
@@ -61,7 +61,7 @@ MarketMaker lets users create "markets" (sessions) where participants can define
 
 - **Auth**: Token-based personal links (no email/password). Token stored in URL param `?p=xxx` and localStorage. Show "save your link" modal on first join.
 - **Order Matching**: Price-time priority (FIFO) with partial fills allowed. Human-speed trading, not high-frequency.
-- **Positions**: Computed view from trades table, not stored separately
+- **Positions**: Database-driven via the `positions` view (aggregates all trades). Position data is fetched from the database and refreshed after trades, ensuring 100% accuracy even when trade history exceeds display limits
 - **P&L**: Mark-to-market against `last_price` on assets table (unitless, not currency-specific)
 - **Real-time**: Supabase subscriptions for order book and trade updates
 - **Cancelled orders**: Hard delete, no history kept
@@ -74,7 +74,7 @@ src/
 │   ├── components/          # Svelte components
 │   │   ├── OrderBook.svelte       # Order book with asset table, order entry, depth view, settlement
 │   │   ├── TradeBlotter.svelte    # Live feed of all market trades
-│   │   ├── PositionBlotter.svelte # User's positions and P&L
+│   │   ├── PositionBlotter.svelte # User's positions and P&L (database-driven)
 │   │   ├── ActiveOrders.svelte    # User's open orders with cancel
 │   │   ├── SaveLinkModal.svelte   # "Save your link" prompt on first visit
 │   │   ├── AdminPanel.svelte      # Participant list + copy links (admin)
@@ -104,8 +104,10 @@ static/
 
 ## Database Schema
 
-Tables: `markets`, `participants`, `assets`, `orders`, `trades`
-View: `positions` (computed from trades)
+Tables: `markets`, `participants`, `assets`, `orders`, `trades`, `messages`
+View: `positions` (computed from ALL trades, including both open and closed positions)
+
+The `positions` view aggregates net_position and cash_flow from all trades. It includes positions where either net_position != 0 OR cash_flow != 0, ensuring closed positions with realized P&L are visible.
 
 Full schema in `supabase/schema.sql` - already deployed to Supabase.
 
