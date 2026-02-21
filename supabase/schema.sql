@@ -97,6 +97,7 @@ CREATE INDEX idx_messages_created ON messages(created_at);
 -- ============================================
 
 -- Positions view: calculates net position and P&L per participant per asset
+-- Shows positions with non-zero net_position OR non-zero cash_flow (for closed positions with realized P&L)
 CREATE VIEW positions AS
 SELECT
     p.id as participant_id,
@@ -128,6 +129,13 @@ HAVING COALESCE(SUM(
     CASE
         WHEN t.buyer_id = p.id THEN t.size
         WHEN t.seller_id = p.id THEN -t.size
+        ELSE 0
+    END
+), 0) != 0
+OR COALESCE(SUM(
+    CASE
+        WHEN t.buyer_id = p.id THEN -t.price * t.size
+        WHEN t.seller_id = p.id THEN t.price * t.size
         ELSE 0
     END
 ), 0) != 0;

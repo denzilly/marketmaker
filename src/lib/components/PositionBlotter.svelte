@@ -1,51 +1,47 @@
 <script lang="ts">
-	import type { Asset } from '$lib/types/database';
-
-	export let trades: Array<{ id: string; asset_id: string; buyer_id: string; seller_id: string; price: number; size: number; executed_at: string }> = [];
-	export let assets: Asset[] = [];
+	export let positions: Array<{
+		participant_id: string;
+		asset_id: string;
+		asset_name: string;
+		last_price: number | null;
+		asset_status: string;
+		settlement_value: number | null;
+		net_position: number;
+		cash_flow: number;
+	}> = [];
 	export let participantId: string;
 	export let participants: Array<{ id: string; name: string }> = [];
 
 	let selectedParticipantId: string = participantId;
 
-	interface ComputedPosition {
-		asset: Asset;
+	interface DisplayPosition {
+		asset_name: string;
 		net_position: number;
 		cash_flow: number;
 		pnl: number | null;
 		is_settled: boolean;
 	}
 
-	// Compute positions reactively from trades
-	$: positions = assets
-		.map((asset) => {
-			const assetTrades = trades.filter((t) => t.asset_id === asset.id);
-
-			let net_position = 0;
-			let cash_flow = 0;
-
-			for (const t of assetTrades) {
-				if (t.buyer_id === selectedParticipantId) {
-					net_position += t.size;
-					cash_flow -= t.price * t.size;
-				}
-				if (t.seller_id === selectedParticipantId) {
-					net_position -= t.size;
-					cash_flow += t.price * t.size;
-				}
-			}
-
-			const is_settled = asset.status === 'settled';
-			const mark_price = is_settled ? asset.settlement_value : asset.last_price;
+	// Filter positions by selected participant and compute P&L
+	$: displayPositions = positions
+		.filter((p) => p.participant_id === selectedParticipantId)
+		.map((p) => {
+			const is_settled = p.asset_status === 'settled';
+			const mark_price = is_settled ? p.settlement_value : p.last_price;
 
 			const pnl =
-				net_position === 0
-					? (cash_flow !== 0 ? cash_flow : null)
-					: (mark_price !== null ? cash_flow + net_position * mark_price : null);
+				p.net_position === 0
+					? (p.cash_flow !== 0 ? p.cash_flow : null)
+					: (mark_price !== null ? p.cash_flow + p.net_position * mark_price : null);
 
-			return { asset, net_position, cash_flow, pnl, is_settled } as ComputedPosition;
-		})
-		.filter((p) => p.net_position !== 0 || p.cash_flow !== 0);
+			return {
+				asset_name: p.asset_name,
+				net_position: p.net_position,
+				cash_flow: p.cash_flow,
+				pnl,
+				is_settled
+			} as DisplayPosition;
+		});
 </script>
 
 <div class="position-blotter">
@@ -59,7 +55,7 @@
 			</select>
 		{/if}
 	</div>
-	{#if positions.length === 0}
+	{#if displayPositions.length === 0}
 		<p class="empty">No positions yet.</p>
 	{:else}
 		<table>
@@ -71,10 +67,10 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each positions as pos}
+				{#each displayPositions as pos}
 					<tr class:settled-row={pos.is_settled}>
 						<td class="asset">
-							{pos.asset.name}
+							{pos.asset_name}
 							{#if pos.is_settled}
 								<span class="settled-badge">SETTLED</span>
 							{/if}

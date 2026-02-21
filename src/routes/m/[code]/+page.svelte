@@ -39,6 +39,17 @@
 		return data.assets.some((a) => a.id === assetId);
 	}
 
+	// Refresh positions from database
+	async function refreshPositions() {
+		const { data: positionData } = await supabase
+			.from('positions')
+			.select('*')
+			.in('participant_id', data.participants.map(p => p.id));
+		if (positionData) {
+			data.positions = positionData;
+		}
+	}
+
 	function setupSubscriptions() {
 		channel = supabase
 			.channel(`market-${data.market.id}`)
@@ -120,12 +131,14 @@
 					schema: 'public',
 					table: 'trades'
 				},
-				(payload) => {
+				async (payload) => {
 					if (!isMarketAsset(payload.new.asset_id)) return;
 
 					if (!data.trades.find((t) => t.id === payload.new.id)) {
 						data.trades = [payload.new as any, ...data.trades];
 						playSound(tradeSound);
+						// Refresh positions after trade
+						await refreshPositions();
 					}
 				}
 			)
@@ -165,17 +178,19 @@
 		// Re-fetch fresh state from DB to catch anything missed while disconnected
 		try {
 			const assetIds = data.assets.map(a => a.id);
-			const [ordersRes, tradesRes, assetsRes, messagesRes] = await Promise.all([
+			const [ordersRes, tradesRes, assetsRes, messagesRes, positionsRes] = await Promise.all([
 				supabase.from('orders').select('*').in('asset_id', assetIds).eq('status', 'open').order('created_at', { ascending: true }),
 				supabase.from('trades').select('id, asset_id, buyer_id, seller_id, price, size, executed_at').in('asset_id', assetIds).order('executed_at', { ascending: false }).limit(50),
 				supabase.from('assets').select('*').eq('market_id', data.market.id),
-				supabase.from('messages').select('*').eq('market_id', data.market.id).order('created_at', { ascending: true }).limit(100)
+				supabase.from('messages').select('*').eq('market_id', data.market.id).order('created_at', { ascending: true }).limit(100),
+				supabase.from('positions').select('*').in('participant_id', data.participants.map(p => p.id))
 			]);
 
 			if (assetsRes.data) data.assets = assetsRes.data as any;
 			if (ordersRes.data) data.orders = ordersRes.data as any;
 			if (tradesRes.data) data.trades = tradesRes.data;
 			if (messagesRes.data) data.messages = messagesRes.data as any;
+			if (positionsRes.data) data.positions = positionsRes.data;
 		} catch (e) {
 			console.error('Failed to refresh data on reconnect:', e);
 		}
@@ -246,9 +261,11 @@
 		data.orders = data.orders.map((o) => (o.id === updated.id ? updated : o));
 	}
 
-	function handleTradeExecuted(event: CustomEvent) {
+	async function handleTradeExecuted(event: CustomEvent) {
 		if (data.trades.find((t) => t.id === event.detail.id)) return;
 		data.trades = [event.detail, ...data.trades];
+		// Refresh positions after trade execution
+		await refreshPositions();
 	}
 
 	function handleAssetUpdated(event: CustomEvent) {
@@ -375,8 +392,7 @@
 		<aside class="sidebar">
 			<section class="positions-section">
 				<PositionBlotter
-					trades={data.trades}
-					assets={data.assets}
+					positions={data.positions}
 					participantId={data.participant.id}
 					participants={data.participants}
 				/>

@@ -19,7 +19,10 @@
       "mcp__stitch__get_project",
       "mcp__stitch__get_screen",
       "Bash(npx vitest run)",
-      "Bash(npx svelte-check:*)"
+      "Bash(npx svelte-check:*)",
+      "Bash(npx supabase:*)",
+      "Bash(node investigate-trade.js:*)",
+      "Bash(node investigate-trade-specific.js:*)"
     ]
   }
 }

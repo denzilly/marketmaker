@@ -96,6 +96,13 @@ export const load: PageLoad = async ({ params, url }) => {
 		.limit(100);
 	const messages = (messageData ?? []) as Message[];
 
+	// Load positions from database view (accurate, based on all trades)
+	const { data: positionData } = await supabase
+		.from('positions')
+		.select('*')
+		.in('participant_id', (participants ?? []).map(p => p.id));
+	const positions = positionData ?? [];
+
 	// Check if this is a first visit (show save link modal)
 	const isFirstVisit = url.searchParams.get('first') !== 'false';
 
@@ -107,6 +114,7 @@ export const load: PageLoad = async ({ params, url }) => {
 		orders,
 		trades,
 		messages,
+		positions,
 		isFirstVisit
 	};
 };
