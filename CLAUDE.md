@@ -43,10 +43,10 @@ MarketMaker lets users create "markets" (sessions) where participants can define
 - [x] Mobile-responsive design (3 breakpoints)
 
 ### Potential Future Work
-- Improved error handling and edge cases
 - Historical charts / price graphs
 - Market templates or presets
 - Spectator mode
+- Proper database-level RLS policies (currently open, app-level token validation only)
 
 ## Key Concepts
 
@@ -65,6 +65,8 @@ MarketMaker lets users create "markets" (sessions) where participants can define
 - **P&L**: Mark-to-market against `last_price` on assets table (unitless, not currency-specific)
 - **Real-time**: Supabase subscriptions for order book and trade updates
 - **Cancelled orders**: Hard delete, no history kept
+- **Prices**: All prices (bid, offer, settlement) support negative values and zero. Useful for spread bets (e.g., B–A quoted as –3/–1). Validation: number required, max 1 decimal place, no lower bound.
+- **Security note**: RLS policies are fully open (`USING (true)`). Security relies on participant tokens being unguessable (UUIDs). Acceptable for a private friends-only app; would need proper RLS for public deployment.
 
 ## Project Structure
 
@@ -109,7 +111,13 @@ View: `positions` (computed from ALL trades, including both open and closed posi
 
 The `positions` view aggregates net_position and cash_flow from all trades. It includes positions where either net_position != 0 OR cash_flow != 0, ensuring closed positions with realized P&L are visible.
 
+`price` columns have no lower-bound constraint — negative prices are valid by design.
+
+Indexes: `participants.token` is a UNIQUE index (enforces token uniqueness at DB level).
+
 Full schema in `supabase/schema.sql` - already deployed to Supabase.
+
+> **Note**: The UNIQUE index change on `participants.token` needs to be applied to the live Supabase instance via the dashboard or a migration if schema.sql is re-run.
 
 ## Commands
 

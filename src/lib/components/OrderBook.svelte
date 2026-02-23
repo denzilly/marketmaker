@@ -33,6 +33,7 @@
 	let offerSize = '';
 	let submittingOrder = false;
 	let orderError = '';
+	let tradeError = '';
 
 	// Depth view state
 	let depthAssetId: string | null = null;
@@ -126,7 +127,8 @@
 			settlementError = 'Settlement value must be a number';
 			return;
 		}
-		if (Math.round(value * 10) !== value * 10) {
+		const settlementParts = String(value).split('.');
+		if (settlementParts.length > 1 && settlementParts[1].length > 1) {
 			settlementError = 'Max 1 decimal place';
 			return;
 		}
@@ -237,8 +239,8 @@
 	async function submitOrders() {
 		if (!orderEntryAssetId) return;
 
-		const hasBid = bidPrice && bidSize;
-		const hasOffer = offerPrice && offerSize;
+		const hasBid = bidPrice !== '' && bidPrice !== null && bidSize;
+		const hasOffer = offerPrice !== '' && offerPrice !== null && offerSize;
 
 		if (!hasBid && !hasOffer) {
 			orderError = 'Enter at least one side (bid or offer)';
@@ -249,7 +251,7 @@
 			const price = parseFloat(bidPrice);
 			const size = parseInt(bidSize, 10);
 			if (isNaN(price)) { orderError = 'Bid price must be a number'; return; }
-			if (Math.round(price * 10) !== price * 10) { orderError = 'Bid price: max 1 decimal place'; return; }
+			const bidParts = String(price).split('.'); if (bidParts.length > 1 && bidParts[1].length > 1) { orderError = 'Bid price: max 1 decimal place'; return; }
 			if (isNaN(size) || size <= 0) { orderError = 'Bid size must be a positive integer'; return; }
 		}
 
@@ -257,7 +259,7 @@
 			const price = parseFloat(offerPrice);
 			const size = parseInt(offerSize, 10);
 			if (isNaN(price)) { orderError = 'Offer price must be a number'; return; }
-			if (Math.round(price * 10) !== price * 10) { orderError = 'Offer price: max 1 decimal place'; return; }
+			const offerParts = String(price).split('.'); if (offerParts.length > 1 && offerParts[1].length > 1) { orderError = 'Offer price: max 1 decimal place'; return; }
 			if (isNaN(size) || size <= 0) { orderError = 'Offer size must be a positive integer'; return; }
 		}
 
@@ -332,7 +334,7 @@
 		}
 	}
 
-	$: canSubmit = (bidPrice && bidSize) || (offerPrice && offerSize);
+	$: canSubmit = (bidPrice !== '' && bidPrice !== null && bidSize) || (offerPrice !== '' && offerPrice !== null && offerSize);
 
 	function depthBar(size: number, maxSize: number, side: 'bid' | 'ask'): string {
 		const pct = (size / maxSize) * 100;
@@ -451,6 +453,9 @@
 			<button class="create-asset-btn" on:click={() => (showCreateForm = true)}>+ Create Asset</button>
 		</div>
 	{:else}
+		{#if tradeError}
+			<div class="error trade-error">{tradeError}</div>
+		{/if}
 		<table>
 			<thead>
 				<tr>
@@ -609,7 +614,7 @@
 										<button
 											class="primary"
 											on:click={submitSettlement}
-											disabled={!settlementValue || submittingSettlement}
+											disabled={settlementValue === '' || submittingSettlement}
 										>
 											{submittingSettlement ? 'Settling...' : 'Confirm Settlement'}
 										</button>

@@ -68,7 +68,9 @@
 		const newPrice = parseFloat(editPrice);
 		const newSize = parseInt(editSize, 10);
 
-		if (isNaN(newPrice) || newPrice <= 0) { amendError = 'Price must be a positive number'; return; }
+		if (isNaN(newPrice)) { amendError = 'Price must be a number'; return; }
+		const priceParts = String(newPrice).split('.');
+		if (priceParts.length > 1 && priceParts[1].length > 1) { amendError = 'Price: max 1 decimal place'; return; }
 		if (isNaN(newSize) || newSize <= 0) { amendError = 'Size must be a positive integer'; return; }
 
 		// No change — just close

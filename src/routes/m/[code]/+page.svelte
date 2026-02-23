@@ -41,10 +41,11 @@
 
 	// Refresh positions from database
 	async function refreshPositions() {
-		const { data: positionData } = await supabase
+		const { data: positionData, error: posError } = await supabase
 			.from('positions')
 			.select('*')
 			.in('participant_id', data.participants.map(p => p.id));
+		if (posError) { console.error('Failed to load positions:', posError); return; }
 		if (positionData) {
 			data.positions = positionData;
 		}
@@ -138,7 +139,7 @@
 						data.trades = [payload.new as any, ...data.trades];
 						playSound(tradeSound);
 						// Refresh positions after trade
-						await refreshPositions();
+						try { await refreshPositions(); } catch (e) { console.error('Position refresh failed:', e); }
 					}
 				}
 			)
@@ -171,7 +172,7 @@
 	async function reconnect() {
 		// Tear down old channel
 		if (channel) {
-			supabase.removeChannel(channel);
+			await supabase.removeChannel(channel);
 			channel = null;
 		}
 

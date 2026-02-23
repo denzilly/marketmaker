@@ -83,7 +83,7 @@ CREATE TABLE messages (
 -- ============================================
 
 CREATE INDEX idx_participants_market ON participants(market_id);
-CREATE INDEX idx_participants_token ON participants(token);
+CREATE UNIQUE INDEX idx_participants_token ON participants(token);
 CREATE INDEX idx_assets_market ON assets(market_id);
 CREATE INDEX idx_orders_asset ON orders(asset_id);
 CREATE INDEX idx_orders_status ON orders(status) WHERE status = 'open';
