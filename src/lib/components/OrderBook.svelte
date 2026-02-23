@@ -460,6 +460,7 @@
 			<thead>
 				<tr>
 					<th class="asset-col">Asset</th>
+					<th class="last-col">Last</th>
 					<th class="size-col">Size</th>
 					<th class="bid-col">Bid</th>
 					<th class="ask-col">Ask</th>
@@ -481,7 +482,7 @@
 						</td>
 
 						{#if asset.status === 'settled'}
-							<td colspan="4" class="settled-info">
+							<td colspan="5" class="settled-info">
 								<span class="settled-value">{asset.settlement_value}</span>
 							</td>
 							<td class="actions-col">
@@ -495,6 +496,7 @@
 								{/if}
 							</td>
 						{:else}
+							<td class="last-col">{asset.last_price !== null ? asset.last_price : ''}</td>
 							<td class="size-col">{topBidSize || '-'}</td>
 							<td class="bid-col">
 								{#if topBid}
@@ -566,14 +568,15 @@
 						{#if maxDepth === 0}
 							<tr class="depth-row depth-last">
 								<td class="asset-col"></td>
-								<td colspan="4" class="depth-empty-msg">No additional orders</td>
+								<td colspan="5" class="depth-empty-msg">No additional orders</td>
 								<td class="actions-col"></td>
 							</tr>
 						{:else}
 							{#each Array(maxDepth) as _, i}
 								<tr class="depth-row" class:depth-last={i === maxDepth - 1}>
-									<td class="asset-col"></td>
-									<td class="size-col">{depthBids[i]?.size ?? ''}</td>
+																<td class="asset-col"></td>
+								<td class="last-col"></td>
+								<td class="size-col">{depthBids[i]?.size ?? ''}</td>
 									<td class="bid-col" style={depthBids[i] ? depthBar(depthBids[i].size, maxSize, 'bid') : ''}>
 										{#if depthBids[i]}
 											<span class="depth-price bid">{depthBids[i].price}</span>
@@ -593,7 +596,7 @@
 
 					{#if settlingAssetId === asset.id}
 						<tr class="settlement-row">
-							<td colspan="6">
+							<td colspan="7">
 								<div class="settlement-form">
 									<h4>Settle "{asset.name}"</h4>
 									<p class="settlement-hint">Enter the final outcome value. All open orders will be cancelled.</p>
@@ -633,7 +636,7 @@
 
 					{#if orderEntryAssetId === asset.id}
 						<tr class="order-entry-row">
-							<td colspan="6">
+							<td colspan="7">
 								<div class="order-entry">
 									{#if orderError}
 										<div class="error">{orderError}</div>
@@ -948,6 +951,14 @@
 
 	.no-price {
 		color: #2e3e66;
+	}
+
+	.last-col {
+		width: 45px;
+		text-align: right;
+		padding-right: 6px;
+		font-size: 0.75rem;
+		color: #607a9c;
 	}
 
 	/* Action buttons */

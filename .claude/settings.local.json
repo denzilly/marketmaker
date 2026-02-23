@@ -23,7 +23,9 @@
       "Bash(npx supabase:*)",
       "Bash(node investigate-trade.js:*)",
       "Bash(node investigate-trade-specific.js:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(python3:*)",
+      "Bash(node:*)"
     ]
   }
 }
