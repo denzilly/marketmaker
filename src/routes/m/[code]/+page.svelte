@@ -72,6 +72,10 @@
 						data.assets = data.assets.map((a) =>
 							a.id === payload.new.id ? (payload.new as any) : a
 						);
+						// Refresh positions when an asset settles so P&L uses settlement_value
+						if (payload.new.status === 'settled') {
+							refreshPositions().catch((e) => console.error('Position refresh failed:', e));
+						}
 					}
 				}
 			)
@@ -291,12 +295,13 @@
 		data.trades = data.trades.filter((t) => t.asset_id !== id);
 	}
 
-	function handleAssetSettled(event: CustomEvent) {
+	async function handleAssetSettled(event: CustomEvent) {
 		const settledAsset = event.detail;
 		data.assets = data.assets.map((a) =>
 			a.id === settledAsset.id ? settledAsset : a
 		);
 		data.orders = data.orders.filter((o) => o.asset_id !== settledAsset.id);
+		await refreshPositions();
 	}
 </script>
 
