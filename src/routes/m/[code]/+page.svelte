@@ -327,7 +327,7 @@
 
 {#if showSettleUpModal}
 	<SettleUpModal
-		trades={data.trades}
+		positions={data.positions}
 		assets={data.assets}
 		participants={data.participants}
 		on:close={() => (showSettleUpModal = false)}

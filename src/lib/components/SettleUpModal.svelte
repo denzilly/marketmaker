@@ -2,7 +2,14 @@
 	import { createEventDispatcher } from 'svelte';
 	import type { Asset, Participant } from '$lib/types/database';
 
-	export let trades: Array<{ id: string; asset_id: string; buyer_id: string; seller_id: string; price: number; size: number; executed_at: string }> = [];
+	export let positions: Array<{
+		participant_id: string;
+		asset_id: string;
+		asset_status: string;
+		settlement_value: number | null;
+		net_position: number;
+		cash_flow: number;
+	}> = [];
 	export let assets: Asset[] = [];
 	export let participants: Pick<Participant, 'id' | 'name'>[] = [];
 
@@ -20,39 +27,16 @@
 		return participants.find((p) => p.id === id)?.name ?? 'Unknown';
 	}
 
-	// Compute realized P&L per participant across all settled assets
 	$: settledAssets = assets.filter((a) => a.status === 'settled');
 
+	// Compute realized P&L per participant from the positions view (all trades, not capped)
 	$: balances = (() => {
 		const map = new Map<string, number>();
 
-		for (const asset of settledAssets) {
-			if (asset.settlement_value === null) continue;
-
-			const assetTrades = trades.filter((t) => t.asset_id === asset.id);
-
-			// Build per-participant position for this asset
-			const positions = new Map<string, { net: number; cash_flow: number }>();
-
-			for (const t of assetTrades) {
-				// Buyer
-				if (!positions.has(t.buyer_id)) positions.set(t.buyer_id, { net: 0, cash_flow: 0 });
-				const buyer = positions.get(t.buyer_id)!;
-				buyer.net += t.size;
-				buyer.cash_flow -= t.price * t.size;
-
-				// Seller
-				if (!positions.has(t.seller_id)) positions.set(t.seller_id, { net: 0, cash_flow: 0 });
-				const seller = positions.get(t.seller_id)!;
-				seller.net -= t.size;
-				seller.cash_flow += t.price * t.size;
-			}
-
-			// Compute realized P&L and add to balances
-			for (const [pid, pos] of positions) {
-				const pnl = pos.cash_flow + pos.net * asset.settlement_value;
-				map.set(pid, (map.get(pid) ?? 0) + pnl);
-			}
+		for (const pos of positions) {
+			if (pos.asset_status !== 'settled' || pos.settlement_value === null) continue;
+			const pnl = pos.cash_flow + pos.net_position * pos.settlement_value;
+			map.set(pos.participant_id, (map.get(pos.participant_id) ?? 0) + pnl);
 		}
 
 		return map;
