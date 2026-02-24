@@ -42,6 +42,8 @@
 				is_settled
 			} as DisplayPosition;
 		});
+
+	$: totalPnl = displayPositions.reduce((sum, p) => sum + (p.pnl ?? 0), 0);
 </script>
 
 <div class="position-blotter">
@@ -93,6 +95,19 @@
 					</tr>
 				{/each}
 			</tbody>
+			<tfoot>
+					<tr class="total-row">
+						<td class="asset">Total</td>
+						<td></td>
+						<td
+							class="pnl"
+							class:positive={totalPnl > 0}
+							class:negative={totalPnl < 0}
+						>
+							{totalPnl > 0 ? '+' : ''}{totalPnl.toFixed(2)}
+						</td>
+					</tr>
+				</tfoot>
 		</table>
 	{/if}
 </div>
@@ -209,6 +224,13 @@
 	}
 
 	tr.settled-row td.asset {
+		color: #8498b5;
+	}
+
+	tfoot td {
+		border-top: 1px solid #243254;
+		border-bottom: none;
+		font-weight: 600;
 		color: #8498b5;
 	}
 </style>
