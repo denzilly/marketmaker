@@ -12,15 +12,16 @@ jobs:
     steps:
       - name: Debug secret shape (no values printed)
         run: |
-          echo "MARKETMAKER length: ${#MARKETMAKER}"
-          echo "MARKETMAKER line count: $(printf '%s' "$MARKETMAKER" | wc -l)"
+          echo "SUPABASE_URL length: ${#SUPABASE_URL}"
+          echo "SUPABASE_ANON_KEY length: ${#SUPABASE_ANON_KEY}"
         env:
-          MARKETMAKER: ${{ secrets.MARKETMAKER }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
       - name: Ping Supabase REST API
         run: |
-          url=$(printf '%s\n' "$MARKETMAKER" | sed -n '1p' | tr -d '\r')
-          key=$(printf '%s\n' "$MARKETMAKER" | sed -n '2p' | tr -d '\r')
+          url=$(printf '%s' "$SUPABASE_URL" | tr -d '\r\n')
+          key=$(printf '%s' "$SUPABASE_ANON_KEY" | tr -d '\r\n')
           status=$(curl -s -o /dev/null -w "%{http_code}" \
             "${url}/rest/v1/markets?select=id&limit=1" \
             -H "apikey: ${key}" \
@@ -31,4 +32,5 @@ jobs:
             exit 1
           fi
         env:
-          MARKETMAKER: ${{ secrets.MARKETMAKER }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
