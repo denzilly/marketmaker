@@ -10,12 +10,23 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
+      - name: Debug secret shape (no values printed)
+        run: |
+          echo "SUPABASE_URL length: ${#SUPABASE_URL}"
+          echo "SUPABASE_URL starts with https://: $(echo "$SUPABASE_URL" | grep -c '^https://' || true)"
+          echo "SUPABASE_ANON_KEY length: ${#SUPABASE_ANON_KEY}"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+
       - name: Ping Supabase REST API
         run: |
+          url=$(printf '%s' "$SUPABASE_URL" | tr -d '\r\n')
+          key=$(printf '%s' "$SUPABASE_ANON_KEY" | tr -d '\r\n')
           status=$(curl -s -o /dev/null -w "%{http_code}" \
-            "${SUPABASE_URL}/rest/v1/markets?select=id&limit=1" \
-            -H "apikey: ${SUPABASE_ANON_KEY}" \
-            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}")
+            "${url}/rest/v1/markets?select=id&limit=1" \
+            -H "apikey: ${key}" \
+            -H "Authorization: Bearer ${key}")
           echo "Response status: $status"
           if [ "$status" -ge 400 ]; then
             echo "Ping failed with status $status"
