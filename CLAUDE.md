@@ -133,9 +133,11 @@ npm run check        # Run svelte-check
 
 Already configured in `.env`:
 ```
-PUBLIC_SUPABASE_URL=https://yhtbwthhyfuldsyfksxh.supabase.co
+PUBLIC_SUPABASE_URL=https://yeuntdgpycuxmycuvywg.supabase.co
 PUBLIC_SUPABASE_ANON_KEY=<configured>
 ```
+
+> **Note**: Supabase project was recreated on 2026-07-21 (`MarketMaker-prod`, id `yeuntdgpycuxmycuvywg`) after the original project (`yhtbwthhyfuldsyfksxh`) was auto-deleted following 90+ days paused. A GitHub Actions cron pings the DB daily to prevent this from recurring (see `.github/workflows/keep-supabase-alive.yml`).
 
 ## Conventions
 
