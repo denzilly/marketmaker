@@ -620,7 +620,7 @@
 		border-radius: 0px;
 		border: 1px solid #243254;
 		padding: 1rem;
-		max-height: 250px;
+		max-height: 312px;
 		display: flex;
 		flex-direction: column;
 	}
