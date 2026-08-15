@@ -1,7 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import { supabase } from '$lib/supabase';
 import type { PageLoad } from './$types';
-import type { Market, Participant, Asset, Order, Message } from '$lib/types/database';
+import type { Market, Participant, Asset, Order, Message, ActivityLogEntry } from '$lib/types/database';
 
 // Disable SSR - this page uses browser-only Supabase client
 export const ssr = false;
@@ -66,6 +66,7 @@ export const load: PageLoad = async ({ params, url }) => {
 		price: number;
 		size: number;
 		executed_at: string;
+		taker_side: 'buy' | 'sell' | null;
 	}> = [];
 
 	if (assetIds.length > 0) {
@@ -80,7 +81,7 @@ export const load: PageLoad = async ({ params, url }) => {
 		// Load recent trades for this market
 		const { data: tradeData } = await supabase
 			.from('trades')
-			.select('id, asset_id, buyer_id, seller_id, price, size, executed_at')
+			.select('id, asset_id, buyer_id, seller_id, price, size, executed_at, taker_side')
 			.in('asset_id', assetIds)
 			.order('executed_at', { ascending: false })
 			.limit(50);
@@ -95,6 +96,15 @@ export const load: PageLoad = async ({ params, url }) => {
 		.order('created_at', { ascending: true })
 		.limit(100);
 	const messages = (messageData ?? []) as Message[];
+
+	// Load recent activity log entries for this market
+	const { data: activityData } = await supabase
+		.from('activity_log')
+		.select('*')
+		.eq('market_id', market.id)
+		.order('created_at', { ascending: false })
+		.limit(75);
+	const activityLog = (activityData ?? []) as ActivityLogEntry[];
 
 	// Load positions from database view (accurate, based on all trades)
 	const { data: positionData } = await supabase
@@ -114,6 +124,7 @@ export const load: PageLoad = async ({ params, url }) => {
 		orders,
 		trades,
 		messages,
+		activityLog,
 		positions,
 		isFirstVisit
 	};

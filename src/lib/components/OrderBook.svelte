@@ -2,13 +2,30 @@
 	import { createEventDispatcher } from 'svelte';
 	import { supabase } from '$lib/supabase';
 	import { matchOrder } from '$lib/utils/order-matching';
-	import type { Asset, Order, OrderSide } from '$lib/types/database';
+	import {
+		logActivity,
+		formatOrderNewMessage,
+		evaluateOrderImprovement,
+		formatTradeMessage,
+		buildTradeDetails,
+		formatSettlementMessage,
+		buildSettlementDetails,
+		getTopOfBook,
+		takerId,
+		makerId
+	} from '$lib/utils/activity-log';
+	import type { ActivityDetails, Asset, Order, OrderSide } from '$lib/types/database';
 
 	export let assets: Asset[] = [];
 	export let orders: Order[] = [];
 	export let marketId: string;
 	export let participantId: string;
+	export let participants: Array<{ id: string; name: string }> = [];
 	export let isAdmin: boolean = false;
+
+	function getParticipantName(pid: string): string {
+		return participants.find((p) => p.id === pid)?.name ?? 'Unknown';
+	}
 
 	const dispatch = createEventDispatcher();
 
@@ -162,6 +179,9 @@
 
 			dispatch('assetSettled', updatedAsset);
 
+			const assetName = assets.find((a) => a.id === settlingAssetId)?.name ?? 'Unknown';
+			await logActivity(marketId, 'settlement', formatSettlementMessage(assetName, value), buildSettlementDetails(assetName, value));
+
 			settlingAssetId = null;
 			settlementValue = '';
 		} catch (e) {
@@ -218,9 +238,19 @@
 			dispatch('orderCreated', newOrder);
 
 			const result = await matchOrder(newOrder.id);
+			const assetName = assets.find((a) => a.id === assetId)?.name ?? 'Unknown';
 
 			for (const trade of result.trades) {
 				dispatch('tradeExecuted', trade);
+				const takerName = getParticipantName(takerId(trade));
+				const makerName = getParticipantName(makerId(trade));
+				const tSide = trade.taker_side ?? 'buy';
+				await logActivity(
+					marketId,
+					'trade',
+					formatTradeMessage(takerName, makerName, tSide, trade.size, assetName, trade.price),
+					buildTradeDetails(takerName, makerName, tSide, assetName, trade.price, trade.size)
+				);
 			}
 			for (const updatedOrder of result.updatedOrders) {
 				dispatch('orderUpdated', updatedOrder);
@@ -273,6 +303,11 @@
 		submittingOrder = true;
 		orderError = '';
 
+		// Capture top-of-book before this order is inserted, so "better bid/offer"
+		// can be judged against the book as it stood a moment ago.
+		const prevBidTop = getTopOfBook(orders, orderEntryAssetId, 'buy');
+		const prevAskTop = getTopOfBook(orders, orderEntryAssetId, 'sell');
+
 		try {
 			const ordersToInsert = [];
 
@@ -305,13 +340,45 @@
 
 			if (error) throw error;
 
+			const assetName = assets.find((a) => a.id === orderEntryAssetId)?.name ?? 'Unknown';
+			const actingName = getParticipantName(participantId);
+
 			for (const order of newOrders ?? []) {
 				dispatch('orderCreated', order);
+
+				const prevBest = order.side === 'buy' ? prevBidTop : prevAskTop;
+				const { better, highlightPrice, highlightSize } = evaluateOrderImprovement(order.side, order.price, order.remaining_size, prevBest);
+				const newOrderDetails: ActivityDetails = {
+					kind: 'order_new',
+					actorName: actingName,
+					side: order.side,
+					price: order.price,
+					size: order.remaining_size,
+					assetName,
+					better,
+					highlightPrice,
+					highlightSize
+				};
+				await logActivity(
+					marketId,
+					'order_new',
+					formatOrderNewMessage(actingName, order.side, order.price, order.remaining_size, assetName, better),
+					newOrderDetails
+				);
 
 				const result = await matchOrder(order.id);
 
 				for (const trade of result.trades) {
 					dispatch('tradeExecuted', trade);
+					const takerName = getParticipantName(takerId(trade));
+					const makerName = getParticipantName(makerId(trade));
+					const tSide = trade.taker_side ?? 'buy';
+					await logActivity(
+						marketId,
+						'trade',
+						formatTradeMessage(takerName, makerName, tSide, trade.size, assetName, trade.price),
+						buildTradeDetails(takerName, makerName, tSide, assetName, trade.price, trade.size)
+					);
 				}
 				for (const updatedOrder of result.updatedOrders) {
 					dispatch('orderUpdated', updatedOrder);

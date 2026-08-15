@@ -13,6 +13,7 @@
 	import AdminPanel from '$lib/components/AdminPanel.svelte';
 	import HelpPanel from '$lib/components/HelpPanel.svelte';
 	import ChatPanel from '$lib/components/ChatPanel.svelte';
+	import ActivityLog from '$lib/components/ActivityLog.svelte';
 
 	export let data;
 
@@ -162,6 +163,21 @@
 					}
 				}
 			)
+			// Subscribe to activity log entries (filtered by market_id)
+			.on(
+				'postgres_changes',
+				{
+					event: 'INSERT',
+					schema: 'public',
+					table: 'activity_log',
+					filter: `market_id=eq.${data.market.id}`
+				},
+				(payload) => {
+					if (!data.activityLog.find((e: any) => e.id === payload.new.id)) {
+						data.activityLog = [payload.new as any, ...data.activityLog];
+					}
+				}
+			)
 			.subscribe((status, err) => {
 				if (status === 'SUBSCRIBED') {
 					connectionStatus = 'connected';
@@ -183,11 +199,12 @@
 		// Re-fetch fresh state from DB to catch anything missed while disconnected
 		try {
 			const assetIds = data.assets.map(a => a.id);
-			const [ordersRes, tradesRes, assetsRes, messagesRes, positionsRes] = await Promise.all([
+			const [ordersRes, tradesRes, assetsRes, messagesRes, activityRes, positionsRes] = await Promise.all([
 				supabase.from('orders').select('*').in('asset_id', assetIds).eq('status', 'open').order('created_at', { ascending: true }),
-				supabase.from('trades').select('id, asset_id, buyer_id, seller_id, price, size, executed_at').in('asset_id', assetIds).order('executed_at', { ascending: false }).limit(50),
+				supabase.from('trades').select('id, asset_id, buyer_id, seller_id, price, size, executed_at, taker_side').in('asset_id', assetIds).order('executed_at', { ascending: false }).limit(50),
 				supabase.from('assets').select('*').eq('market_id', data.market.id),
 				supabase.from('messages').select('*').eq('market_id', data.market.id).order('created_at', { ascending: true }).limit(100),
+				supabase.from('activity_log').select('*').eq('market_id', data.market.id).order('created_at', { ascending: false }).limit(75),
 				supabase.from('positions').select('*').in('participant_id', data.participants.map(p => p.id))
 			]);
 
@@ -195,6 +212,7 @@
 			if (ordersRes.data) data.orders = ordersRes.data as any;
 			if (tradesRes.data) data.trades = tradesRes.data;
 			if (messagesRes.data) data.messages = messagesRes.data as any;
+			if (activityRes.data) data.activityLog = activityRes.data as any;
 			if (positionsRes.data) data.positions = positionsRes.data;
 		} catch (e) {
 			console.error('Failed to refresh data on reconnect:', e);
@@ -374,6 +392,7 @@
 					orders={data.orders}
 					marketId={data.market.id}
 					participantId={data.participant.id}
+					participants={data.participants}
 					isAdmin={data.participant.is_admin}
 					on:assetCreated={handleAssetCreated}
 					on:orderCreated={handleOrderCreated}
@@ -393,6 +412,10 @@
 					marketId={data.market.id}
 				/>
 			</section>
+
+			<section class="activity-section">
+				<ActivityLog entries={data.activityLog} />
+			</section>
 		</div>
 
 		<aside class="sidebar">
@@ -408,6 +431,7 @@
 				<ActiveOrders
 					orders={data.orders}
 					assets={data.assets}
+					marketId={data.market.id}
 					participantId={data.participant.id}
 					participants={data.participants}
 					on:orderCancelled={handleOrderCancelled}
@@ -565,7 +589,7 @@
 	main {
 		flex: 1;
 		display: grid;
-		grid-template-columns: 1fr 400px;
+		grid-template-columns: 1fr 480px;
 		gap: 0.7rem;
 		padding: 0.7rem;
 	}
@@ -597,6 +621,16 @@
 		border: 1px solid #243254;
 		padding: 1rem;
 		max-height: 250px;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.activity-section {
+		background: #111b2e;
+		border-radius: 0px;
+		border: 1px solid #243254;
+		padding: 1rem;
+		max-height: 220px;
 		display: flex;
 		flex-direction: column;
 	}
