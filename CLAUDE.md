@@ -41,6 +41,9 @@ MarketMaker lets users create "markets" (sessions) where participants can define
 - [x] Help panel (user guide)
 - [x] Sound effects (order placed, trade executed)
 - [x] Mobile-responsive design (3 breakpoints)
+- [x] Activity log (shared feed of new orders, cancels, amends, trades, settlements)
+- [x] Trade blotter phrased taker-leads-maker ("X buys/sells ASSET from/to Y")
+- [x] Chat input keeps focus after sending a message
 
 ### Potential Future Work
 - Historical charts / price graphs
@@ -65,6 +68,7 @@ MarketMaker lets users create "markets" (sessions) where participants can define
 - **P&L**: Mark-to-market against `last_price` on assets table (unitless, not currency-specific)
 - **Real-time**: Supabase subscriptions for order book and trade updates
 - **Cancelled orders**: Hard delete, no history kept
+- **Activity log**: A dedicated `activity_log` table (separate from `messages`) holds a plain-text `message` per event plus a structured `details` JSONB payload (one shape per `type`, see `ActivityDetails` in `database.ts`) so the UI can style individual pieces — asset name in white, and price/size in amber when a new order improves on the prior top of book ("better bid/offered"). Rows are inserted directly by the acting client (`src/lib/utils/activity-log.ts`) and fanned out to everyone via the same Supabase realtime pattern used for trades/messages. Rows without `details` (or from before this was added) fall back to rendering the plain `message`. `trades.taker_side` records which side crossed the book (the aggressor); it's null on trades recorded before this was added, and both the trade blotter and activity log fall back to buyer-first phrasing in that case.
 - **Prices**: All prices (bid, offer, settlement) support negative values and zero. Useful for spread bets (e.g., B–A quoted as –3/–1). Validation: number required, max 1 decimal place, no lower bound.
 - **Security note**: RLS policies are fully open (`USING (true)`). Security relies on participant tokens being unguessable (UUIDs). Acceptable for a private friends-only app; would need proper RLS for public deployment.
 
@@ -81,12 +85,15 @@ src/
 │   │   ├── SaveLinkModal.svelte   # "Save your link" prompt on first visit
 │   │   ├── AdminPanel.svelte      # Participant list + copy links (admin)
 │   │   ├── HelpPanel.svelte       # How-to-play guide
-│   │   └── SettleUpModal.svelte   # Settlement calculation (who owes whom)
+│   │   ├── SettleUpModal.svelte   # Settlement calculation (who owes whom)
+│   │   ├── ChatPanel.svelte       # Market chat
+│   │   └── ActivityLog.svelte     # Shared feed of orders/cancels/amends/trades/settlements
 │   ├── types/               # TypeScript interfaces
 │   │   └── database.ts
 │   ├── utils/               # Utilities
 │   │   ├── market-code.ts         # 3-word code generator + validator
-│   │   └── order-matching.ts      # FIFO price-time priority matching engine
+│   │   ├── order-matching.ts      # FIFO price-time priority matching engine
+│   │   └── activity-log.ts        # Activity log message formatting + insert helper
 │   ├── supabase.ts          # Supabase client
 │   └── index.ts             # Re-exports
 ├── routes/
@@ -106,7 +113,7 @@ static/
 
 ## Database Schema
 
-Tables: `markets`, `participants`, `assets`, `orders`, `trades`, `messages`
+Tables: `markets`, `participants`, `assets`, `orders`, `trades`, `messages`, `activity_log`
 View: `positions` (computed from ALL trades, including both open and closed positions)
 
 The `positions` view aggregates net_position and cash_flow from all trades. It includes positions where either net_position != 0 OR cash_flow != 0, ensuring closed positions with realized P&L are visible.

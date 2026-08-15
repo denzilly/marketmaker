@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Asset } from '$lib/types/database';
+	import type { Asset, OrderSide } from '$lib/types/database';
 
 	interface TradeData {
 		id: string;
@@ -9,6 +9,7 @@
 		price: number;
 		size: number;
 		executed_at: string;
+		taker_side: OrderSide | null;
 	}
 
 	export let trades: TradeData[] = [];
@@ -21,6 +22,25 @@
 
 	function getParticipantName(participantId: string): string {
 		return participants.find((p) => p.id === participantId)?.name ?? 'Unknown';
+	}
+
+	// The "taker" is whoever crossed the book (the aggressor); the "maker" is
+	// whoever was resting in the book and got hit. Trades recorded before this
+	// was tracked (taker_side null) default to reading buyer-first.
+	function takerSide(trade: TradeData): OrderSide {
+		return trade.taker_side ?? 'buy';
+	}
+
+	function takerId(trade: TradeData): string {
+		return takerSide(trade) === 'sell' ? trade.seller_id : trade.buyer_id;
+	}
+
+	function makerId(trade: TradeData): string {
+		return takerSide(trade) === 'sell' ? trade.buyer_id : trade.seller_id;
+	}
+
+	function preposition(trade: TradeData): string {
+		return takerSide(trade) === 'sell' ? 'to' : 'from';
 	}
 
 	function formatTime(dateStr: string): string {
@@ -36,22 +56,28 @@
 		<table>
 			<thead>
 				<tr>
+					<th>Taker</th>
+					<th>Side</th>
 					<th>Asset</th>
-					<th>Buyer</th>
-					<th>Size</th>
+					<th class="prep-col"></th>
+					<th>Maker</th>
 					<th>Price</th>
-					<th>Seller</th>
+					<th>Size</th>
 					<th>Time</th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each trades as trade (trade.id)}
 					<tr>
+						<td class="trader">{getParticipantName(takerId(trade))}</td>
+						<td class="side" class:buy={takerSide(trade) === 'buy'} class:sell={takerSide(trade) === 'sell'}>
+							{takerSide(trade) === 'buy' ? 'BUYS' : 'SELLS'}
+						</td>
 						<td class="asset">{getAssetName(trade.asset_id)}</td>
-						<td class="buyer">{getParticipantName(trade.buyer_id)}</td>
-						<td class="size">{trade.size}</td>
+						<td class="prep-col">{preposition(trade)}</td>
+						<td class="counterparty">{getParticipantName(makerId(trade))}</td>
 						<td class="price">{trade.price}</td>
-						<td class="seller">{getParticipantName(trade.seller_id)}</td>
+						<td class="size">{trade.size}</td>
 						<td class="time">{formatTime(trade.executed_at)}</td>
 					</tr>
 				{/each}
@@ -100,17 +126,40 @@
 		border-bottom: none;
 	}
 
-	.asset {
+	.trader {
 		color: #fff;
 		font-weight: 500;
 	}
 
-	.buyer {
+	.asset {
+		color: #adc5e4;
+	}
+
+	.side {
+		font-weight: 600;
+		font-size: 0.75rem;
+		letter-spacing: 0.03em;
+	}
+
+	.side.buy {
 		color: #4ade80;
 	}
 
-	.seller {
+	.side.sell {
 		color: #f87171;
+	}
+
+	.counterparty {
+		color: #8498b5;
+	}
+
+	.prep-col {
+		width: 1%;
+		white-space: nowrap;
+		padding-left: 0;
+		padding-right: 0;
+		color: #435a80;
+		font-size: 0.75rem;
 	}
 
 	.price {

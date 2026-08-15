@@ -53,6 +53,8 @@ export interface Trade {
 	price: number;
 	size: number;
 	executed_at: string;
+	// Which side crossed the book (aggressor). Null for trades recorded before this was tracked.
+	taker_side: OrderSide | null;
 }
 
 export interface Message {
@@ -60,6 +62,65 @@ export interface Message {
 	market_id: string;
 	participant_id: string;
 	content: string;
+	created_at: string;
+}
+
+export type ActivityType = 'order_new' | 'order_cancelled' | 'order_amended' | 'trade' | 'settlement';
+
+// Structured payload per activity type, so the UI can style individual pieces
+// (asset name, changed price/size) instead of re-parsing a sentence.
+export type ActivityDetails =
+	| {
+			kind: 'order_new';
+			actorName: string;
+			side: OrderSide;
+			price: number;
+			size: number;
+			assetName: string;
+			better: boolean;
+			highlightPrice: boolean;
+			highlightSize: boolean;
+	  }
+	| {
+			kind: 'order_cancelled';
+			actorName: string;
+			side: OrderSide;
+			price: number;
+			size: number;
+			assetName: string;
+	  }
+	| {
+			kind: 'order_amended';
+			actorName: string;
+			side: OrderSide;
+			assetName: string;
+			oldPrice: number;
+			oldSize: number;
+			newPrice: number;
+			newSize: number;
+			verb: 'increased' | 'decreased' | 'changed';
+	  }
+	| {
+			kind: 'trade';
+			takerName: string;
+			makerName: string;
+			side: OrderSide;
+			assetName: string;
+			price: number;
+			size: number;
+	  }
+	| {
+			kind: 'settlement';
+			assetName: string;
+			value: number;
+	  };
+
+export interface ActivityLogEntry {
+	id: string;
+	market_id: string;
+	type: ActivityType;
+	message: string;
+	details: ActivityDetails | null;
 	created_at: string;
 }
 

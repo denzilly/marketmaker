@@ -66,7 +66,9 @@ CREATE TABLE trades (
     seller_id UUID NOT NULL REFERENCES participants(id),
     price DECIMAL NOT NULL,
     size INTEGER NOT NULL CHECK (size > 0),
-    executed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    executed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Which side crossed the book (the incoming/aggressor order) vs rested as the maker.
+    taker_side TEXT CHECK (taker_side IN ('buy', 'sell'))
 );
 
 -- Chat messages
@@ -75,6 +77,21 @@ CREATE TABLE messages (
     market_id UUID NOT NULL REFERENCES markets(id) ON DELETE CASCADE,
     participant_id UUID NOT NULL REFERENCES participants(id),
     content TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Activity log: a running feed of notable market events (orders, cancellations,
+-- amendments, trades, settlements) so all participants see a shared history.
+CREATE TABLE activity_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    market_id UUID NOT NULL REFERENCES markets(id) ON DELETE CASCADE,
+    type TEXT NOT NULL CHECK (type IN ('order_new', 'order_cancelled', 'order_amended', 'trade', 'settlement')),
+    message TEXT NOT NULL,
+    -- Structured payload so the UI can style individual pieces (asset name,
+    -- changed price/size) instead of re-parsing the sentence. Null on rows
+    -- where the inserting client didn't provide it; the UI falls back to
+    -- rendering the plain `message`.
+    details JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -91,6 +108,8 @@ CREATE INDEX idx_trades_asset ON trades(asset_id);
 CREATE INDEX idx_trades_executed ON trades(executed_at DESC);
 CREATE INDEX idx_messages_market ON messages(market_id);
 CREATE INDEX idx_messages_created ON messages(created_at);
+CREATE INDEX idx_activity_log_market ON activity_log(market_id);
+CREATE INDEX idx_activity_log_created ON activity_log(created_at);
 
 -- ============================================
 -- VIEWS
@@ -150,6 +169,7 @@ ALTER TABLE assets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activity_log ENABLE ROW LEVEL SECURITY;
 
 -- For now, allow all operations (we'll validate via participant token in the app)
 -- In production, you'd want more restrictive policies
@@ -160,6 +180,7 @@ CREATE POLICY "Allow all asset operations" ON assets FOR ALL USING (true) WITH C
 CREATE POLICY "Allow all order operations" ON orders FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all trade operations" ON trades FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all message operations" ON messages FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all activity log operations" ON activity_log FOR ALL USING (true) WITH CHECK (true);
 
 -- ============================================
 -- REALTIME
@@ -171,6 +192,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE trades;
 ALTER PUBLICATION supabase_realtime ADD TABLE assets;
 ALTER PUBLICATION supabase_realtime ADD TABLE participants;
 ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+ALTER PUBLICATION supabase_realtime ADD TABLE activity_log;
 
 -- ============================================
 -- FUNCTIONS
@@ -245,8 +267,8 @@ BEGIN
       v_seller_id := v_incoming.participant_id;
     END IF;
 
-    INSERT INTO trades (asset_id, buy_order_id, sell_order_id, buyer_id, seller_id, price, size)
-    VALUES (v_incoming.asset_id, v_buy_order_id, v_sell_order_id, v_buyer_id, v_seller_id, v_trade_price, v_fill_size)
+    INSERT INTO trades (asset_id, buy_order_id, sell_order_id, buyer_id, seller_id, price, size, taker_side)
+    VALUES (v_incoming.asset_id, v_buy_order_id, v_sell_order_id, v_buyer_id, v_seller_id, v_trade_price, v_fill_size, v_incoming.side)
     RETURNING id INTO v_trade_id;
 
     v_trade_ids := array_append(v_trade_ids, v_trade_id);

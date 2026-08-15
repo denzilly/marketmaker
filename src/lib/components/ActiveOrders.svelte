@@ -2,10 +2,22 @@
 	import { createEventDispatcher } from 'svelte';
 	import { supabase } from '$lib/supabase';
 	import { matchOrder } from '$lib/utils/order-matching';
+	import {
+		logActivity,
+		formatOrderCancelledMessage,
+		buildOrderCancelledDetails,
+		formatOrderAmendedMessage,
+		buildOrderAmendedDetails,
+		formatTradeMessage,
+		buildTradeDetails,
+		takerId,
+		makerId
+	} from '$lib/utils/activity-log';
 	import type { Asset, Order } from '$lib/types/database';
 
 	export let orders: Order[] = [];
 	export let assets: Asset[] = [];
+	export let marketId: string;
 	export let participantId: string;
 	export let participants: Array<{ id: string; name: string }> = [];
 
@@ -116,11 +128,29 @@
 
 			dispatch('orderAmended', updated);
 
+			const assetName = getAssetName(order.asset_id);
+			const actorName = getParticipantName(participantId);
+			await logActivity(
+				marketId,
+				'order_amended',
+				formatOrderAmendedMessage(actorName, order.side, assetName, order.remaining_size, order.price, newSize, newPrice),
+				buildOrderAmendedDetails(actorName, order.side, assetName, order.price, order.remaining_size, newPrice, newSize)
+			);
+
 			// Re-match to check for crosses at the new price
 			const result = await matchOrder(order.id);
 
 			for (const trade of result.trades) {
 				dispatch('tradeExecuted', trade);
+				const takerName = getParticipantName(takerId(trade));
+				const makerName = getParticipantName(makerId(trade));
+				const tSide = trade.taker_side ?? 'buy';
+				await logActivity(
+					marketId,
+					'trade',
+					formatTradeMessage(takerName, makerName, tSide, trade.size, assetName, trade.price),
+					buildTradeDetails(takerName, makerName, tSide, assetName, trade.price, trade.size)
+				);
 			}
 			for (const updatedOrder of result.updatedOrders) {
 				dispatch('orderUpdated', updatedOrder);
@@ -159,6 +189,14 @@
 
 			for (const order of filteredOrders) {
 				dispatch('orderCancelled', order);
+				const actorName = getParticipantName(order.participant_id);
+				const assetName = getAssetName(order.asset_id);
+				await logActivity(
+					marketId,
+					'order_cancelled',
+					formatOrderCancelledMessage(actorName, order.side, order.remaining_size, assetName, order.price),
+					buildOrderCancelledDetails(actorName, order.side, order.price, order.remaining_size, assetName)
+				);
 			}
 		} catch (e) {
 			console.error('Failed to cancel all orders:', e);
@@ -187,6 +225,14 @@
 
 			// Remove from local state either way
 			dispatch('orderCancelled', order);
+			const actorName = getParticipantName(order.participant_id);
+			const assetName = getAssetName(order.asset_id);
+			await logActivity(
+				marketId,
+				'order_cancelled',
+				formatOrderCancelledMessage(actorName, order.side, order.remaining_size, assetName, order.price),
+				buildOrderCancelledDetails(actorName, order.side, order.price, order.remaining_size, assetName)
+			);
 		} catch (e) {
 			console.error('Failed to cancel order:', e);
 			cancelError = 'Failed to cancel order. Try refreshing the page.';

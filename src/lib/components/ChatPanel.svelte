@@ -11,6 +11,7 @@
 	let messageText = '';
 	let sending = false;
 	let messagesContainer: HTMLDivElement;
+	let messageInput: HTMLInputElement;
 	let shouldAutoScroll = true;
 
 	function getParticipantName(pid: string): string {
@@ -52,6 +53,8 @@
 			console.error('Failed to send message:', e);
 		} finally {
 			sending = false;
+			await tick();
+			messageInput?.focus();
 		}
 	}
 
@@ -83,6 +86,7 @@
 	<div class="input-area">
 		<input
 			type="text"
+			bind:this={messageInput}
 			bind:value={messageText}
 			on:keydown={handleKeydown}
 			placeholder="Type a message..."
