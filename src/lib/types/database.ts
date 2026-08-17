@@ -55,6 +55,32 @@ export interface Trade {
 	executed_at: string;
 	// Which side crossed the book (aggressor). Null for trades recorded before this was tracked.
 	taker_side: OrderSide | null;
+	// True when the trade came from an accepted OTC proposal rather than the order book.
+	// Null/absent on trades recorded before OTC trading existed.
+	is_otc?: boolean | null;
+}
+
+export type OtcStatus = 'pending' | 'accepted' | 'declined' | 'cancelled';
+
+/**
+ * A bilateral trade proposal sent directly to another participant, bypassing
+ * the order book. `side` is from the PROPOSER's perspective: 'buy' means the
+ * proposer wants to buy from the counterparty, 'sell' means sell to them.
+ */
+export interface OtcProposal {
+	id: string;
+	market_id: string;
+	asset_id: string;
+	proposer_id: string;
+	counterparty_id: string;
+	side: OrderSide;
+	price: number;
+	size: number;
+	status: OtcStatus;
+	trade_id: string | null;
+	created_at: string;
+	updated_at: string;
+	resolved_at: string | null;
 }
 
 export interface Message {
@@ -108,6 +134,8 @@ export type ActivityDetails =
 			assetName: string;
 			price: number;
 			size: number;
+			// Set on trades printed from an accepted OTC proposal, so the feed can tag them.
+			otc?: boolean;
 	  }
 	| {
 			kind: 'settlement';

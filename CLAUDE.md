@@ -44,6 +44,7 @@ MarketMaker lets users create "markets" (sessions) where participants can define
 - [x] Activity log (shared feed of new orders, cancels, amends, trades, settlements)
 - [x] Trade blotter phrased taker-leads-maker ("X buys/sells ASSET from/to Y")
 - [x] Chat input keeps focus after sending a message
+- [x] OTC desk (bilateral proposals: send / amend / cancel / accept / decline, ping + badge on incoming)
 
 ### Potential Future Work
 - Historical charts / price graphs
@@ -69,6 +70,7 @@ MarketMaker lets users create "markets" (sessions) where participants can define
 - **Real-time**: Supabase subscriptions for order book and trade updates
 - **Cancelled orders**: Hard delete, no history kept
 - **Activity log**: A dedicated `activity_log` table (separate from `messages`) holds a plain-text `message` per event plus a structured `details` JSONB payload (one shape per `type`, see `ActivityDetails` in `database.ts`) so the UI can style individual pieces — asset name in white, and price/size in amber when a new order improves on the prior top of book ("better bid/offered"). Rows are inserted directly by the acting client (`src/lib/utils/activity-log.ts`) and fanned out to everyone via the same Supabase realtime pattern used for trades/messages. Rows without `details` (or from before this was added) fall back to rendering the plain `message`. `trades.taker_side` records which side crossed the book (the aggressor); it's null on trades recorded before this was added, and both the trade blotter and activity log fall back to buyer-first phrasing in that case.
+- **OTC trading**: A private desk (header `OTC` button) for trading directly with one other participant, deliberately isolated from the order book. A proposal (`otc_proposals`) carries asset, counterparty, side *from the proposer's perspective*, price and size; the proposer can amend price/size or cancel while it's pending, the counterparty accepts or declines. The counterparty gets a ping (`static/sounds/ping.wav`) and a red count badge on the OTC button, pinging again if the terms are amended. Accepting claims the row with a conditional update (`status = 'pending'`) so a concurrent cancel can't double-execute, then writes the two trade legs as already-**filled** orders (every book/blotter query filters `status = 'open'`, so they never surface) and prints a `trades` row with `is_otc = true`. Consequences by design: the book is untouched, `assets.last_price` is **not** moved (the terms were negotiated privately), positions/settlement pick the trade up like any other, the trade appears in Recent Trades with a small amber `OTC` tag, and the activity log entry gets an orange `OTC:` prefix (`details.otc`, so no new activity type or DB constraint change).
 - **Prices**: All prices (bid, offer, settlement) support negative values and zero. Useful for spread bets (e.g., B–A quoted as –3/–1). Validation: number required, max 1 decimal place, no lower bound.
 - **Security note**: RLS policies are fully open (`USING (true)`). Security relies on participant tokens being unguessable (UUIDs). Acceptable for a private friends-only app; would need proper RLS for public deployment.
 
@@ -87,13 +89,16 @@ src/
 │   │   ├── HelpPanel.svelte       # How-to-play guide
 │   │   ├── SettleUpModal.svelte   # Settlement calculation (who owes whom)
 │   │   ├── ChatPanel.svelte       # Market chat
-│   │   └── ActivityLog.svelte     # Shared feed of orders/cancels/amends/trades/settlements
+│   │   ├── ActivityLog.svelte     # Shared feed of orders/cancels/amends/trades/settlements
+│   │   └── OtcPanel.svelte        # OTC desk (propose/amend/cancel + accept/decline)
 │   ├── types/               # TypeScript interfaces
 │   │   └── database.ts
 │   ├── utils/               # Utilities
 │   │   ├── market-code.ts         # 3-word code generator + validator
 │   │   ├── order-matching.ts      # FIFO price-time priority matching engine
-│   │   └── activity-log.ts        # Activity log message formatting + insert helper
+│   │   ├── activity-log.ts        # Activity log message formatting + insert helper
+│   │   ├── otc.ts                 # OTC pure helpers (validation, phrasing, filters)
+│   │   └── otc-actions.ts         # OTC Supabase ops (accept -> print trade)
 │   ├── supabase.ts          # Supabase client
 │   └── index.ts             # Re-exports
 ├── routes/
@@ -108,12 +113,13 @@ src/
 static/
 └── sounds/
     ├── order.mp3            # Sound on order placement
-    └── trade.mp3            # Sound on trade execution
+    ├── trade.mp3            # Sound on trade execution
+    └── ping.wav             # Sound on incoming OTC request
 ```
 
 ## Database Schema
 
-Tables: `markets`, `participants`, `assets`, `orders`, `trades`, `messages`, `activity_log`
+Tables: `markets`, `participants`, `assets`, `orders`, `trades`, `messages`, `activity_log`, `otc_proposals`
 View: `positions` (computed from ALL trades, including both open and closed positions)
 
 The `positions` view aggregates net_position and cash_flow from all trades. It includes positions where either net_position != 0 OR cash_flow != 0, ensuring closed positions with realized P&L are visible.
@@ -125,6 +131,8 @@ Indexes: `participants.token` is a UNIQUE index (enforces token uniqueness at DB
 Full schema in `supabase/schema.sql` - already deployed to Supabase.
 
 > **Note**: The UNIQUE index change on `participants.token` needs to be applied to the live Supabase instance via the dashboard or a migration if schema.sql is re-run.
+
+> **Note**: OTC trading needs `supabase/otc.sql` run against the live instance (creates `otc_proposals`, adds `trades.is_otc`, enables realtime). Until it is applied, the OTC desk will error on send/accept; the rest of the app is unaffected.
 
 ## Commands
 

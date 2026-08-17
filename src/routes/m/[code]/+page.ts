@@ -1,7 +1,7 @@
 import { error, redirect } from '@sveltejs/kit';
 import { supabase } from '$lib/supabase';
 import type { PageLoad } from './$types';
-import type { Market, Participant, Asset, Order, Message, ActivityLogEntry } from '$lib/types/database';
+import type { Market, Participant, Asset, Order, Message, ActivityLogEntry, OtcProposal } from '$lib/types/database';
 
 // Disable SSR - this page uses browser-only Supabase client
 export const ssr = false;
@@ -106,6 +106,16 @@ export const load: PageLoad = async ({ params, url }) => {
 		.limit(75);
 	const activityLog = (activityData ?? []) as ActivityLogEntry[];
 
+	// Load OTC proposals this participant is a party to (either side)
+	const { data: otcData } = await supabase
+		.from('otc_proposals')
+		.select('*')
+		.eq('market_id', market.id)
+		.or(`proposer_id.eq.${participant.id},counterparty_id.eq.${participant.id}`)
+		.order('created_at', { ascending: false })
+		.limit(50);
+	const otcProposals = (otcData ?? []) as OtcProposal[];
+
 	// Load positions from database view (accurate, based on all trades)
 	const { data: positionData } = await supabase
 		.from('positions')
@@ -125,6 +135,7 @@ export const load: PageLoad = async ({ params, url }) => {
 		trades,
 		messages,
 		activityLog,
+		otcProposals,
 		positions,
 		isFirstVisit
 	};

@@ -50,6 +50,7 @@
 							<span class="asset">{d.assetName}</span>
 						{:else if entry.details?.kind === 'trade'}
 							{@const d = entry.details}
+							{#if d.otc}<span class="otc-prefix">OTC:</span>{/if}
 							<span class="name">{d.takerName}</span>
 							{d.side === 'buy' ? 'bought' : 'sold'}
 							<span class="num">{d.size}</span>
@@ -168,6 +169,13 @@
 	.num.hl {
 		color: #fbbf24;
 		font-weight: 600;
+	}
+
+	/* Off-book trades are prefixed rather than restyled, so the feed reads the same */
+	.otc-prefix {
+		color: #fbbf24;
+		font-weight: 700;
+		letter-spacing: 0.03em;
 	}
 
 	.better {

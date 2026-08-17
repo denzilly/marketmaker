@@ -68,7 +68,32 @@ CREATE TABLE trades (
     size INTEGER NOT NULL CHECK (size > 0),
     executed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- Which side crossed the book (the incoming/aggressor order) vs rested as the maker.
-    taker_side TEXT CHECK (taker_side IN ('buy', 'sell'))
+    taker_side TEXT CHECK (taker_side IN ('buy', 'sell')),
+    -- True for trades printed from an accepted OTC proposal (negotiated bilaterally,
+    -- never resting in the book). False/absent for ordinary order book trades.
+    is_otc BOOLEAN NOT NULL DEFAULT false
+);
+
+-- OTC proposals: one participant proposes a trade directly to another, off book.
+-- `side` is from the PROPOSER's perspective: 'buy' means the proposer bids
+-- (wants to buy from the counterparty), 'sell' means the proposer offers.
+CREATE TABLE otc_proposals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    market_id UUID NOT NULL REFERENCES markets(id) ON DELETE CASCADE,
+    asset_id UUID NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    proposer_id UUID NOT NULL REFERENCES participants(id),
+    counterparty_id UUID NOT NULL REFERENCES participants(id),
+    side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+    price DECIMAL NOT NULL,
+    size INTEGER NOT NULL CHECK (size > 0),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined', 'cancelled')),
+    -- Set when accepted, so both sides can link the proposal to the printed trade.
+    trade_id UUID REFERENCES trades(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Bumped on amend; the UI shows an "amended" tag when it differs from created_at.
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    resolved_at TIMESTAMPTZ,
+    CONSTRAINT otc_proposals_distinct_parties CHECK (proposer_id != counterparty_id)
 );
 
 -- Chat messages
@@ -110,6 +135,10 @@ CREATE INDEX idx_messages_market ON messages(market_id);
 CREATE INDEX idx_messages_created ON messages(created_at);
 CREATE INDEX idx_activity_log_market ON activity_log(market_id);
 CREATE INDEX idx_activity_log_created ON activity_log(created_at);
+CREATE INDEX idx_otc_proposals_market ON otc_proposals(market_id);
+CREATE INDEX idx_otc_proposals_counterparty ON otc_proposals(counterparty_id) WHERE status = 'pending';
+CREATE INDEX idx_otc_proposals_proposer ON otc_proposals(proposer_id) WHERE status = 'pending';
+CREATE INDEX idx_otc_proposals_created ON otc_proposals(created_at DESC);
 
 -- ============================================
 -- VIEWS
@@ -170,6 +199,7 @@ ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activity_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE otc_proposals ENABLE ROW LEVEL SECURITY;
 
 -- For now, allow all operations (we'll validate via participant token in the app)
 -- In production, you'd want more restrictive policies
@@ -181,6 +211,7 @@ CREATE POLICY "Allow all order operations" ON orders FOR ALL USING (true) WITH C
 CREATE POLICY "Allow all trade operations" ON trades FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all message operations" ON messages FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all activity log operations" ON activity_log FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all otc proposal operations" ON otc_proposals FOR ALL USING (true) WITH CHECK (true);
 
 -- ============================================
 -- REALTIME
@@ -193,6 +224,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE assets;
 ALTER PUBLICATION supabase_realtime ADD TABLE participants;
 ALTER PUBLICATION supabase_realtime ADD TABLE messages;
 ALTER PUBLICATION supabase_realtime ADD TABLE activity_log;
+ALTER PUBLICATION supabase_realtime ADD TABLE otc_proposals;
 
 -- ============================================
 -- FUNCTIONS

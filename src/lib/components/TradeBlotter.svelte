@@ -10,6 +10,7 @@
 		size: number;
 		executed_at: string;
 		taker_side: OrderSide | null;
+		is_otc?: boolean | null;
 	}
 
 	export let trades: TradeData[] = [];
@@ -73,7 +74,10 @@
 						<td class="side" class:buy={takerSide(trade) === 'buy'} class:sell={takerSide(trade) === 'sell'}>
 							{takerSide(trade) === 'buy' ? 'BUYS' : 'SELLS'}
 						</td>
-						<td class="asset">{getAssetName(trade.asset_id)}</td>
+						<td class="asset">
+							{getAssetName(trade.asset_id)}
+							{#if trade.is_otc}<span class="otc-tag">OTC</span>{/if}
+						</td>
 						<td class="prep-col">{preposition(trade)}</td>
 						<td class="counterparty">{getParticipantName(makerId(trade))}</td>
 						<td class="price">{trade.price}</td>
@@ -133,6 +137,18 @@
 
 	.asset {
 		color: #adc5e4;
+	}
+
+	/* Marks a trade negotiated off book via the OTC desk */
+	.otc-tag {
+		color: #fbbf24;
+		border: 1px solid rgba(251, 191, 36, 0.4);
+		border-radius: 3px;
+		padding: 0 0.2rem;
+		font-size: 0.5625rem;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		vertical-align: middle;
 	}
 
 	.side {
