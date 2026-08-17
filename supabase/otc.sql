@@ -56,3 +56,63 @@ CREATE POLICY "Allow all otc proposal operations" ON otc_proposals FOR ALL USING
 -- ============================================
 
 ALTER PUBLICATION supabase_realtime ADD TABLE otc_proposals;
+
+-- ============================================
+-- POSITIONS VIEW: mark price fallback
+-- ============================================
+
+-- An asset that has only ever traded OTC has no `last_price` (OTC prints are
+-- negotiated privately and deliberately don't move it), which left open
+-- positions in it with no mark and therefore no unrealized P&L at all. Add a
+-- `mark_price` column that falls back to the most recent trade of any kind.
+-- `last_price` keeps its meaning (last book trade) for the order book.
+CREATE OR REPLACE VIEW positions AS
+SELECT
+    p.id as participant_id,
+    a.id as asset_id,
+    a.name as asset_name,
+    a.last_price,
+    a.status as asset_status,
+    a.settlement_value,
+    COALESCE(SUM(
+        CASE
+            WHEN t.buyer_id = p.id THEN t.size
+            WHEN t.seller_id = p.id THEN -t.size
+            ELSE 0
+        END
+    ), 0) as net_position,
+    COALESCE(SUM(
+        CASE
+            WHEN t.buyer_id = p.id THEN -t.price * t.size
+            WHEN t.seller_id = p.id THEN t.price * t.size
+            ELSE 0
+        END
+    ), 0) as cash_flow,
+    -- Price to mark open positions against. Normally the last book trade, but
+    -- assets that have only ever traded OTC have no last_price (OTC prints are
+    -- negotiated privately and don't move it), so fall back to the most recent
+    -- trade of any kind rather than showing no P&L at all. Appended last so the
+    -- view can be updated in place with CREATE OR REPLACE.
+    COALESCE(
+        a.last_price,
+        (SELECT t2.price FROM trades t2 WHERE t2.asset_id = a.id ORDER BY t2.executed_at DESC LIMIT 1)
+    ) as mark_price
+FROM participants p
+CROSS JOIN assets a
+LEFT JOIN trades t ON t.asset_id = a.id AND (t.buyer_id = p.id OR t.seller_id = p.id)
+WHERE a.market_id = p.market_id
+GROUP BY p.id, a.id, a.name, a.last_price, a.status, a.settlement_value
+HAVING COALESCE(SUM(
+    CASE
+        WHEN t.buyer_id = p.id THEN t.size
+        WHEN t.seller_id = p.id THEN -t.size
+        ELSE 0
+    END
+), 0) != 0
+OR COALESCE(SUM(
+    CASE
+        WHEN t.buyer_id = p.id THEN -t.price * t.size
+        WHEN t.seller_id = p.id THEN t.price * t.size
+        ELSE 0
+    END
+), 0) != 0;

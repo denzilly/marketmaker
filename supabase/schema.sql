@@ -167,7 +167,16 @@ SELECT
             WHEN t.seller_id = p.id THEN t.price * t.size
             ELSE 0
         END
-    ), 0) as cash_flow
+    ), 0) as cash_flow,
+    -- Price to mark open positions against. Normally the last book trade, but
+    -- assets that have only ever traded OTC have no last_price (OTC prints are
+    -- negotiated privately and don't move it), so fall back to the most recent
+    -- trade of any kind rather than showing no P&L at all. Appended last so the
+    -- view can be updated in place with CREATE OR REPLACE.
+    COALESCE(
+        a.last_price,
+        (SELECT t2.price FROM trades t2 WHERE t2.asset_id = a.id ORDER BY t2.executed_at DESC LIMIT 1)
+    ) as mark_price
 FROM participants p
 CROSS JOIN assets a
 LEFT JOIN trades t ON t.asset_id = a.id AND (t.buyer_id = p.id OR t.seller_id = p.id)
