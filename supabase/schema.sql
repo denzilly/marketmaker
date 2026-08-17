@@ -168,14 +168,14 @@ SELECT
             ELSE 0
         END
     ), 0) as cash_flow,
-    -- Price to mark open positions against. Normally the last book trade, but
-    -- assets that have only ever traded OTC have no last_price (OTC prints are
-    -- negotiated privately and don't move it), so fall back to the most recent
-    -- trade of any kind rather than showing no P&L at all. Appended last so the
-    -- view can be updated in place with CREATE OR REPLACE.
+    -- Price to mark open positions against: the most recent trade of any kind,
+    -- OTC included. assets.last_price is kept in step by every trade path and
+    -- serves as the fallback, but the trade itself is the source of truth here
+    -- (it also covers OTC trades printed before last_price tracked them).
+    -- Appended last so the view can be updated in place with CREATE OR REPLACE.
     COALESCE(
-        a.last_price,
-        (SELECT t2.price FROM trades t2 WHERE t2.asset_id = a.id ORDER BY t2.executed_at DESC LIMIT 1)
+        (SELECT t2.price FROM trades t2 WHERE t2.asset_id = a.id ORDER BY t2.executed_at DESC LIMIT 1),
+        a.last_price
     ) as mark_price
 FROM participants p
 CROSS JOIN assets a

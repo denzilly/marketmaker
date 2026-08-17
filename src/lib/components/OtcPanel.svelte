@@ -207,6 +207,7 @@
 				resolved_at: new Date().toISOString()
 			});
 			dispatch('tradeExecuted', trade);
+			dispatch('assetUpdated', { id: proposal.asset_id, last_price: proposal.price });
 
 			const { buyerId, sellerId } = tradeParties(proposal);
 			const buyerName = participantName(buyerId);

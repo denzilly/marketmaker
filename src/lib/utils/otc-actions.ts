@@ -14,8 +14,10 @@ import { acceptorSide, tradeParties, OtcError } from './otc';
  * never appear in the book (every book/blotter query filters on status='open')
  * but they keep the `positions` view and settlement math working unchanged.
  *
- * The asset's `last_price` is deliberately left alone: an OTC print is
- * negotiated privately and shouldn't move everyone's mark-to-market.
+ * An OTC print counts as a market price like any other trade, so it also moves
+ * the asset's `last_price` — the book's Last column and everyone's
+ * mark-to-market follow it. Only the order book itself stays untouched: no
+ * resting order is created or consumed.
  */
 export async function acceptProposal(proposal: OtcProposal, acceptingParticipantId: string): Promise<Trade> {
 	if (proposal.counterparty_id !== acceptingParticipantId) {
@@ -86,6 +88,16 @@ export async function acceptProposal(proposal: OtcProposal, acceptingParticipant
 		if (tradeError) throw tradeError;
 
 		await supabase.from('otc_proposals').update({ trade_id: trade.id }).eq('id', proposal.id);
+
+		// Treat the print as a market price change: the book's Last column and
+		// mark-to-market P&L both track it. Not fatal if it fails — the positions
+		// view marks off the most recent trade regardless.
+		const { error: assetError } = await supabase
+			.from('assets')
+			.update({ last_price: proposal.price })
+			.eq('id', proposal.asset_id);
+
+		if (assetError) console.error('Failed to update last price after OTC trade:', assetError);
 
 		return trade as Trade;
 	} catch (e) {

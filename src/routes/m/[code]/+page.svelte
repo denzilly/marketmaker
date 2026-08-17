@@ -412,6 +412,7 @@
 		marketId={data.market.id}
 		on:proposalUpserted={handleProposalUpserted}
 		on:tradeExecuted={handleTradeExecuted}
+		on:assetUpdated={handleAssetUpdated}
 		on:close={() => (showOtcPanel = false)}
 	/>
 {/if}
