@@ -14,6 +14,9 @@
 	import HelpPanel from '$lib/components/HelpPanel.svelte';
 	import ChatPanel from '$lib/components/ChatPanel.svelte';
 	import ActivityLog from '$lib/components/ActivityLog.svelte';
+	import OtcPanel from '$lib/components/OtcPanel.svelte';
+	import { isPendingIncoming, involves } from '$lib/utils/otc';
+	import type { OtcProposal } from '$lib/types/database';
 
 	export let data;
 
@@ -25,10 +28,18 @@
 	let showSettleUpModal = false;
 	let showAdminPanel = false;
 	let showHelp = false;
+	let showOtcPanel = false;
+	// Set when a request lands while the desk is closed; drives the button pulse.
+	let otcHasNew = false;
 	const SEEN_KEY = `mm_seen_${data.participant.token}`;
 
 	let orderSound: HTMLAudioElement;
 	let tradeSound: HTMLAudioElement;
+	let pingSound: HTMLAudioElement;
+
+	$: otcPendingCount = data.otcProposals.filter((p: OtcProposal) =>
+		isPendingIncoming(p, data.participant.id)
+	).length;
 
 	function playSound(sound: HTMLAudioElement) {
 		sound.currentTime = 0;
@@ -118,6 +129,9 @@
 					if (!isMarketAsset(assetId)) return;
 
 					if (payload.eventType === 'INSERT') {
+						// OTC trades write their legs as already-filled orders; they never
+						// rest in the book, so they shouldn't chime or show up as new orders.
+						if (payload.new.status !== 'open') return;
 						if (!data.orders.find((o) => o.id === payload.new.id)) {
 							data.orders = [...data.orders, payload.new as any];
 							playSound(orderSound);
@@ -178,6 +192,37 @@
 					}
 				}
 			)
+			// Subscribe to OTC proposals (filtered by market_id, then to ones we're party to)
+			.on(
+				'postgres_changes',
+				{
+					event: '*',
+					schema: 'public',
+					table: 'otc_proposals',
+					filter: `market_id=eq.${data.market.id}`
+				},
+				(payload) => {
+					if (payload.eventType === 'DELETE') {
+						data.otcProposals = data.otcProposals.filter((p: OtcProposal) => p.id !== payload.old.id);
+						return;
+					}
+
+					const proposal = payload.new as OtcProposal;
+					if (!involves(proposal, data.participant.id)) return;
+
+					const existing = data.otcProposals.find((p: OtcProposal) => p.id === proposal.id);
+					data.otcProposals = existing
+						? data.otcProposals.map((p: OtcProposal) => (p.id === proposal.id ? proposal : p))
+						: [proposal, ...data.otcProposals];
+
+					// Ping the receiving side on a new request, and again if it's amended.
+					const isNewTerms = !existing || existing.updated_at !== proposal.updated_at;
+					if (isPendingIncoming(proposal, data.participant.id) && isNewTerms) {
+						playSound(pingSound);
+						if (!showOtcPanel) otcHasNew = true;
+					}
+				}
+			)
 			.subscribe((status, err) => {
 				if (status === 'SUBSCRIBED') {
 					connectionStatus = 'connected';
@@ -199,12 +244,13 @@
 		// Re-fetch fresh state from DB to catch anything missed while disconnected
 		try {
 			const assetIds = data.assets.map(a => a.id);
-			const [ordersRes, tradesRes, assetsRes, messagesRes, activityRes, positionsRes] = await Promise.all([
+			const [ordersRes, tradesRes, assetsRes, messagesRes, activityRes, otcRes, positionsRes] = await Promise.all([
 				supabase.from('orders').select('*').in('asset_id', assetIds).eq('status', 'open').order('created_at', { ascending: true }),
 				supabase.from('trades').select('id, asset_id, buyer_id, seller_id, price, size, executed_at, taker_side').in('asset_id', assetIds).order('executed_at', { ascending: false }).limit(50),
 				supabase.from('assets').select('*').eq('market_id', data.market.id),
 				supabase.from('messages').select('*').eq('market_id', data.market.id).order('created_at', { ascending: true }).limit(100),
 				supabase.from('activity_log').select('*').eq('market_id', data.market.id).order('created_at', { ascending: false }).limit(75),
+				supabase.from('otc_proposals').select('*').eq('market_id', data.market.id).or(`proposer_id.eq.${data.participant.id},counterparty_id.eq.${data.participant.id}`).order('created_at', { ascending: false }).limit(50),
 				supabase.from('positions').select('*').in('participant_id', data.participants.map(p => p.id))
 			]);
 
@@ -213,6 +259,7 @@
 			if (tradesRes.data) data.trades = tradesRes.data;
 			if (messagesRes.data) data.messages = messagesRes.data as any;
 			if (activityRes.data) data.activityLog = activityRes.data as any;
+			if (otcRes.data) data.otcProposals = otcRes.data as any;
 			if (positionsRes.data) data.positions = positionsRes.data;
 		} catch (e) {
 			console.error('Failed to refresh data on reconnect:', e);
@@ -233,6 +280,7 @@
 	onMount(() => {
 		orderSound = new Audio('/sounds/order.mp3');
 		tradeSound = new Audio('/sounds/trade.mp3');
+		pingSound = new Audio('/sounds/ping.wav');
 
 		// Show save link modal on first visit (if not seen before)
 		if (data.isFirstVisit && !localStorage.getItem(SEEN_KEY)) {
@@ -313,6 +361,18 @@
 		data.trades = data.trades.filter((t) => t.asset_id !== id);
 	}
 
+	function handleProposalUpserted(event: CustomEvent) {
+		const proposal = event.detail as OtcProposal;
+		data.otcProposals = data.otcProposals.find((p: OtcProposal) => p.id === proposal.id)
+			? data.otcProposals.map((p: OtcProposal) => (p.id === proposal.id ? proposal : p))
+			: [proposal, ...data.otcProposals];
+	}
+
+	function openOtcPanel() {
+		showOtcPanel = true;
+		otcHasNew = false;
+	}
+
 	async function handleAssetSettled(event: CustomEvent) {
 		const settledAsset = event.detail;
 		data.assets = data.assets.map((a) =>
@@ -343,6 +403,20 @@
 	<HelpPanel on:close={() => (showHelp = false)} />
 {/if}
 
+{#if showOtcPanel}
+	<OtcPanel
+		proposals={data.otcProposals}
+		assets={data.assets}
+		participants={data.participants}
+		participantId={data.participant.id}
+		marketId={data.market.id}
+		on:proposalUpserted={handleProposalUpserted}
+		on:tradeExecuted={handleTradeExecuted}
+		on:assetUpdated={handleAssetUpdated}
+		on:close={() => (showOtcPanel = false)}
+	/>
+{/if}
+
 {#if showSettleUpModal}
 	<SettleUpModal
 		positions={data.positions}
@@ -371,6 +445,17 @@
 					Admin Panel
 				</button>
 			{/if}
+			<button
+				class="otc-btn"
+				class:has-new={otcHasNew}
+				on:click={openOtcPanel}
+				title="Propose a trade directly to another participant"
+			>
+				OTC
+				{#if otcPendingCount > 0}
+					<span class="otc-badge">{otcPendingCount}</span>
+				{/if}
+			</button>
 			<button class="settle-up-btn" on:click={() => (showSettleUpModal = true)}>
 				Settle Up
 			</button>
@@ -570,6 +655,64 @@
 	.help-btn:hover {
 		border-color: #3d5078;
 		color: #8498b5;
+	}
+
+	.otc-btn {
+		position: relative;
+		background: transparent;
+		border: 1px solid #7ec8ff;
+		color: #7ec8ff;
+		padding: 0.5rem 1rem;
+		border-radius: 6px;
+		font-size: 0.875rem;
+		font-weight: 600;
+		letter-spacing: 0.03em;
+	}
+
+	.otc-btn:hover {
+		background: rgba(126, 200, 255, 0.15);
+	}
+
+	.otc-badge {
+		position: absolute;
+		top: -0.4rem;
+		right: -0.4rem;
+		background: #ef4444;
+		color: #fff;
+		font-size: 0.6875rem;
+		font-weight: 700;
+		min-width: 1.15rem;
+		height: 1.15rem;
+		border-radius: 999px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0 0.25rem;
+		border: 1px solid #111b2e;
+	}
+
+	/* Pulses until the desk is opened, so a request that arrives mid-trade is hard to miss */
+	.otc-btn.has-new {
+		border-color: #ef4444;
+		color: #fff;
+		animation: otc-pulse 1.4s ease-in-out infinite;
+	}
+
+	@keyframes otc-pulse {
+		0%, 100% {
+			box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5);
+			background: rgba(239, 68, 68, 0.12);
+		}
+		50% {
+			box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+			background: rgba(239, 68, 68, 0.28);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.otc-btn.has-new {
+			animation: none;
+		}
 	}
 
 	.settle-up-btn {

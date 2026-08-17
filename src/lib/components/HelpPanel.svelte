@@ -77,6 +77,27 @@
 			</section>
 
 			<section>
+				<h3>OTC Trading</h3>
+				<p>
+					The <strong>OTC</strong> button opens a private desk for
+					trading directly with one other participant instead of the
+					order book. Pick a side, an asset, a counterparty, a price and
+					a size, then send the proposal. While it's outstanding you can
+					<strong>amend</strong> the price and size or
+					<strong>cancel</strong> it.
+				</p>
+				<p>
+					Your counterparty hears a ping and sees a badge on their OTC
+					button, and can <strong class="ask">accept</strong> or
+					<strong class="bid">decline</strong>. An accepted proposal
+					prints a trade tagged <strong>OTC</strong> in the blotter and
+					counts towards positions and settlement like any other trade.
+					It does not move the asset's last price, since the terms were
+					negotiated privately.
+				</p>
+			</section>
+
+			<section>
 				<h3>Positions & P&L</h3>
 				<p>
 					The <strong>My Positions</strong> panel shows your net

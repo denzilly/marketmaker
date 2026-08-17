@@ -4,6 +4,9 @@
 		asset_id: string;
 		asset_name: string;
 		last_price: number | null;
+		// Last book trade, or (for assets that have only traded OTC) the most
+		// recent trade of any kind. Absent on rows read before the view added it.
+		mark_price?: number | null;
 		asset_status: string;
 		settlement_value: number | null;
 		net_position: number;
@@ -27,7 +30,7 @@
 		.filter((p) => p.participant_id === selectedParticipantId)
 		.map((p) => {
 			const is_settled = p.asset_status === 'settled';
-			const mark_price = is_settled ? p.settlement_value : p.last_price;
+			const mark_price = is_settled ? p.settlement_value : (p.mark_price ?? p.last_price);
 
 			const pnl =
 				p.net_position === 0
